@@ -1,0 +1,6 @@
+- [Usar uv para Python](feedback_use_uv.md) — siempre uv en lugar de pip/python para entornos, deps y ejecucion
+- [Estado del proyecto](project_status.md) — 100% implementado (3 etapas), 76 tests, listo para distribucion
+- [Arquitectura y modulos](project_architecture.md) — mapa de modulos, responsabilidades y flujo de datos
+- [Patrones clave](project_key_patterns.md) — deduplicacion, calculo de costo, formato real de logs JSONL, precios
+- [Testing y fixtures](project_testing.md) — como correr tests, fixtures disponibles, edge cases cubiertos
+- [Build y distribucion](project_build.md) — PyInstaller (no py2app), comandos de dev y build
