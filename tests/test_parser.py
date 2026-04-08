@@ -155,26 +155,31 @@ class TestDeduplication:
         dedup_entry = [e for e in entries if e.message_id == "msg_dedup_001"]
         assert len(dedup_entry) == 1
         assert dedup_entry[0].usage.output_tokens == 50  # último gana
+        assert dedup_entry[0].usage.cache_creation_1h_tokens == 150
+        assert dedup_entry[0].usage.cache_creation_5m_tokens == 50
 
 
 # --- Cálculo de costo correcto ---
 
 
 class TestCostCalculation:
-    def test_opus_cost(self):
+    def test_opus_cost_with_cache_breakdown(self):
         pricing = PRICING_TABLE["claude-opus-4-6"]
         usage = TokenUsage(
             input_tokens=100,
             output_tokens=50,
             cache_read_input_tokens=500,
             cache_creation_input_tokens=200,
+            cache_creation_5m_tokens=80,
+            cache_creation_1h_tokens=120,
         )
         cost = ClaudeLogParser._calculate_cost("claude-opus-4-6", usage)
         expected = (
             100 * pricing.input
             + 50 * pricing.output
             + 500 * pricing.cache_read
-            + 200 * pricing.cache_create
+            + 80 * pricing.cache_create_5m
+            + 120 * pricing.cache_create_1h
         ) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
@@ -198,6 +203,24 @@ class TestCostCalculation:
         usage = TokenUsage(input_tokens=1000, output_tokens=500)
         cost = ClaudeLogParser._calculate_cost("claude-unknown-model", usage)
         assert cost == 0.0
+
+    def test_cache_fallback_all_as_5m(self):
+        """Si no hay desglose 1h/5m, todo cache_creation se trata como 5m."""
+        pricing = PRICING_TABLE["claude-opus-4-6"]
+        usage = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_creation_input_tokens=300,
+            cache_creation_5m_tokens=300,  # fallback: todo como 5m
+            cache_creation_1h_tokens=0,
+        )
+        cost = ClaudeLogParser._calculate_cost("claude-opus-4-6", usage)
+        expected = (
+            100 * pricing.input
+            + 50 * pricing.output
+            + 300 * pricing.cache_create_5m
+        ) / 1_000_000
+        assert abs(cost - expected) < 1e-10
 
 
 # --- Filtrado por fecha ---

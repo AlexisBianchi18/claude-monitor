@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import threading
 from datetime import date
 
 import rumps
@@ -10,6 +12,9 @@ import rumps
 from .config import ConfigManager
 from .log_parser import ClaudeLogParser
 from .models import DailyReport
+from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
+
+logger = logging.getLogger(__name__)
 
 
 class ClaudeMonitorApp(rumps.App):
@@ -27,6 +32,10 @@ class ClaudeMonitorApp(rumps.App):
         self._separator2 = rumps.separator
         self._week_item = rumps.MenuItem("This week: ...", callback=None)
         self._separator3 = rumps.separator
+        self._pricing_item = rumps.MenuItem("Prices: built-in defaults", callback=None)
+        self._update_prices_item = rumps.MenuItem(
+            "Update Prices Now", callback=self._on_update_prices
+        )
         self._refresh_item = rumps.MenuItem("Refresh Now", callback=self._on_refresh)
         self._reset_item = rumps.MenuItem(
             "Reset Daily Counter", callback=self._on_reset_daily
@@ -43,6 +52,8 @@ class ClaudeMonitorApp(rumps.App):
             self._separator2,
             self._week_item,
             self._separator3,
+            self._pricing_item,
+            self._update_prices_item,
             self._refresh_item,
             self._reset_item,
             self._prefs_item,
@@ -57,10 +68,14 @@ class ClaudeMonitorApp(rumps.App):
         # Refresh inmediato al arrancar
         self._refresh()
 
+        # Intentar actualizar precios en background al iniciar
+        self._maybe_fetch_pricing()
+
     # --- Callbacks ---
 
     def _on_timer(self, sender: rumps.Timer) -> None:
         self._refresh()
+        self._maybe_fetch_pricing()
 
     def _on_refresh(self, sender: rumps.MenuItem | None = None) -> None:
         self._refresh()
@@ -89,6 +104,29 @@ class ClaudeMonitorApp(rumps.App):
             self.config.save()
         os.system(f'open -e "{self.config.config_path}"')
 
+    def _on_update_prices(self, sender: rumps.MenuItem) -> None:
+        """Actualización manual de precios desde la web."""
+        self._pricing_item.title = "Prices: updating..."
+        thread = threading.Thread(
+            target=self._fetch_pricing_background, daemon=True
+        )
+        thread.start()
+
+    def _maybe_fetch_pricing(self) -> None:
+        """Lanza fetch en background si el cache tiene más de 24h."""
+        if not should_fetch():
+            return
+        thread = threading.Thread(
+            target=self._fetch_pricing_background, daemon=True
+        )
+        thread.start()
+
+    def _fetch_pricing_background(self) -> None:
+        """Ejecuta fetch en un thread. El próximo _refresh() actualiza la UI."""
+        _, error = update_pricing()
+        if error:
+            logger.warning("Price update failed: %s", error)
+
     # --- Logica de refresh ---
 
     def _refresh(self) -> None:
@@ -103,6 +141,12 @@ class ClaudeMonitorApp(rumps.App):
 
             self._update_title(display_cost, today)
             self._update_menu(report, weekly, display_cost)
+
+            # Actualizar estado de precios
+            age = get_pricing_age()
+            self._pricing_item.title = (
+                f"Prices: {age}" if age else "Prices: built-in defaults"
+            )
         except Exception:
             self.title = "C err"
 
@@ -159,6 +203,8 @@ class ClaudeMonitorApp(rumps.App):
             self._separator2,
             self._week_item,
             self._separator3,
+            self._pricing_item,
+            self._update_prices_item,
             self._refresh_item,
             self._reset_item,
             self._prefs_item,

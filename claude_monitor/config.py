@@ -19,16 +19,19 @@ class ModelPricing:
     input: float
     output: float
     cache_read: float
-    cache_create: float
+    cache_create_5m: float
+    cache_create_1h: float
 
 
+# Precios oficiales de https://platform.claude.com/docs/en/about-claude/pricing
+# Última verificación: 2026-04-08
 PRICING_TABLE: dict[str, ModelPricing] = {
-    # Opus 4.6
-    "claude-opus-4-6": ModelPricing(15.0, 75.0, 1.50, 18.75),
-    # Sonnet 4.6
-    "claude-sonnet-4-6": ModelPricing(3.0, 15.0, 0.30, 3.75),
-    # Haiku 4.5
-    "claude-haiku-4-5-20251001": ModelPricing(0.80, 4.0, 0.08, 1.0),
+    # Opus 4.6: $5/$25 base, cache read 0.1x, 5m write 1.25x, 1h write 2x
+    "claude-opus-4-6": ModelPricing(5.0, 25.0, 0.50, 6.25, 10.0),
+    # Sonnet 4.6: $3/$15 base
+    "claude-sonnet-4-6": ModelPricing(3.0, 15.0, 0.30, 3.75, 6.0),
+    # Haiku 4.5: $1/$5 base
+    "claude-haiku-4-5-20251001": ModelPricing(1.0, 5.0, 0.10, 1.25, 2.0),
 }
 
 # Modelos a ignorar (no generan costo real)

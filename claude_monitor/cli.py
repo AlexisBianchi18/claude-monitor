@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 from datetime import date
 
 from .log_parser import ClaudeLogParser
 from .models import DailyReport
+from .pricing_fetcher import get_pricing_age, update_pricing
 
 
 def _format_cost(cost: float) -> str:
@@ -58,6 +60,24 @@ def _print_weekly_summary(reports: list[DailyReport], today: date) -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description="Claude Code cost report")
+    ap.add_argument(
+        "--update-prices",
+        action="store_true",
+        help="Fetch latest pricing from Anthropic docs",
+    )
+    args = ap.parse_args()
+
+    if args.update_prices:
+        print("Fetching latest pricing from Anthropic...")
+        pricing, error = update_pricing()
+        if error:
+            print(f"Warning: {error}")
+            print("Using fallback prices.")
+        else:
+            print(f"Prices updated: {len(pricing)} models")
+        return
+
     parser = ClaudeLogParser()
     today = date.today()
 
@@ -66,6 +86,13 @@ def main() -> None:
 
     weekly = parser.get_weekly_report()
     _print_weekly_summary(weekly, today)
+
+    # Fuente de precios
+    age = get_pricing_age()
+    if age:
+        print(f"  Prices: {age}")
+    else:
+        print("  Prices: built-in defaults")
 
 
 if __name__ == "__main__":

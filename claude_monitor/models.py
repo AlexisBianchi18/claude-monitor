@@ -13,7 +13,9 @@ class TokenUsage:
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_input_tokens: int = 0
-    cache_creation_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0  # total (5m + 1h)
+    cache_creation_5m_tokens: int = 0
+    cache_creation_1h_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:

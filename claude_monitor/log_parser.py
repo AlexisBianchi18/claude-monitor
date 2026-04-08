@@ -7,7 +7,8 @@ import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from .config import BILLABLE_TYPE, CLAUDE_LOGS_DIR, PRICING_TABLE, SKIP_MODELS
+from .config import BILLABLE_TYPE, CLAUDE_LOGS_DIR, SKIP_MODELS
+from .pricing_fetcher import get_pricing_table
 from .models import CostEntry, DailyReport, ProjectStats, TokenUsage
 
 
@@ -123,15 +124,32 @@ class ClaudeLogParser:
                     if local_date != target_date:
                         continue
 
+                    cache_creation_total = usage_raw.get(
+                        "cache_creation_input_tokens", 0
+                    )
+                    cache_detail = usage_raw.get("cache_creation", {})
+                    cache_1h = 0
+                    cache_5m = 0
+                    if isinstance(cache_detail, dict):
+                        cache_1h = cache_detail.get(
+                            "ephemeral_1h_input_tokens", 0
+                        )
+                        cache_5m = cache_detail.get(
+                            "ephemeral_5m_input_tokens", 0
+                        )
+                    # Fallback: si no hay desglose, tratar todo como 5m
+                    if cache_creation_total > 0 and (cache_1h + cache_5m) == 0:
+                        cache_5m = cache_creation_total
+
                     usage = TokenUsage(
                         input_tokens=usage_raw.get("input_tokens", 0),
                         output_tokens=usage_raw.get("output_tokens", 0),
                         cache_read_input_tokens=usage_raw.get(
                             "cache_read_input_tokens", 0
                         ),
-                        cache_creation_input_tokens=usage_raw.get(
-                            "cache_creation_input_tokens", 0
-                        ),
+                        cache_creation_input_tokens=cache_creation_total,
+                        cache_creation_5m_tokens=cache_5m,
+                        cache_creation_1h_tokens=cache_1h,
                     )
 
                     cost = self._calculate_cost(model, usage)
@@ -205,7 +223,7 @@ class ClaudeLogParser:
     @staticmethod
     def _calculate_cost(model: str, usage: TokenUsage) -> float:
         """Calcula el costo en USD basándose en tokens y precios del modelo."""
-        pricing = PRICING_TABLE.get(model)
+        pricing = get_pricing_table().get(model)
         if pricing is None:
             return 0.0
 
@@ -213,7 +231,8 @@ class ClaudeLogParser:
             usage.input_tokens * pricing.input
             + usage.output_tokens * pricing.output
             + usage.cache_read_input_tokens * pricing.cache_read
-            + usage.cache_creation_input_tokens * pricing.cache_create
+            + usage.cache_creation_5m_tokens * pricing.cache_create_5m
+            + usage.cache_creation_1h_tokens * pricing.cache_create_1h
         ) / 1_000_000
 
     @staticmethod
