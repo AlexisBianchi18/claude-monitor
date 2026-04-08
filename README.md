@@ -4,13 +4,13 @@ Aplicación para macOS que monitorea en tiempo real el costo y uso de tokens de 
 
 ## Estado actual
 
-**Etapa 2 completada** — App en barra de menú de macOS.
+**Etapa 3 completada** — App empaquetada como .app standalone para macOS.
 
 | Etapa | Descripción | Estado |
 |-------|-------------|--------|
 | 1 | Parser + CLI Report | ✅ |
 | 2 | App en barra de menú (rumps) | ✅ |
-| 3 | Pulido, alertas y empaquetado (.app) | Pendiente |
+| 3 | Pulido, alertas y empaquetado (.app) | ✅ |
 
 ## Qué hace
 
@@ -55,7 +55,14 @@ Aparece un icono `C $X.XX` en la barra de menú de macOS. Al hacer click muestra
 - Botón "Refresh Now" para actualizar manualmente
 - Botón "Quit" para cerrar
 
-Se auto-refresca cada 30 segundos. Si el costo supera $5.00, el título cambia a `⚠ $X.XX`.
+Se auto-refresca cada 30 segundos. Si el costo supera $5.00, el título cambia a `⚠ $X.XX` y envía una notificación de macOS (una vez por día).
+
+Funcionalidades adicionales (Etapa 3):
+
+- **Reset Daily Counter**: Resetea el contador del día a $0.00 (guarda el costo actual como offset)
+- **Preferences**: Abre el archivo de configuración `~/.claude-monitor/config.json` con TextEdit
+- **Alertas nativas**: Notificación de macOS cuando el costo supera el umbral (configurable)
+- **Configuración persistente**: Todos los ajustes se guardan en `~/.claude-monitor/config.json`
 
 ### Reporte en terminal
 
@@ -87,6 +94,38 @@ Salida ejemplo:
          Week  $59.0189  (avg $8.4313/day)
 ```
 
+### Empaquetar como .app (Etapa 3)
+
+```bash
+# Instalar PyInstaller
+uv pip install pyinstaller
+
+# Build de producción (standalone)
+.venv/bin/python setup.py
+
+# Abrir la app
+open dist/Claude\ Monitor.app
+```
+
+La app empaquetada (~22 MB):
+- No aparece en el Dock (`LSUIElement: true`)
+- Es standalone (incluye Python y todas las dependencias)
+- Se puede copiar a `/Applications/`
+
+### Configuración
+
+La app guarda su configuración en `~/.claude-monitor/config.json`:
+
+```json
+{
+  "refresh_interval_seconds": 30,
+  "cost_alert_threshold_usd": 5.0,
+  "max_projects_in_menu": 10
+}
+```
+
+Se puede editar desde el menú (Preferences) o manualmente.
+
 ## Tests
 
 ```bash
@@ -98,9 +137,12 @@ Salida ejemplo:
 
 # Ejecutar solo tests de modelos
 .venv/bin/python -m pytest tests/test_models.py -v
+
+# Ejecutar solo tests de configuración
+.venv/bin/python -m pytest tests/test_config.py -v
 ```
 
-### Cobertura de tests (33 tests)
+### Cobertura de tests (50 tests)
 
 - Directorio inexistente → reporte vacío sin error
 - Archivos vacíos y líneas JSON malformadas → se ignoran
@@ -119,6 +161,15 @@ Salida ejemplo:
 - Directorio `memory/` ignorado
 - Archivos `.meta.json` ignorados
 - Reporte semanal retorna 7 días ordenados
+- ConfigManager crea directorio y archivo si no existen
+- Config con JSON corrupto → usa defaults
+- Config con JSON array → usa defaults
+- Config vacío → usa defaults
+- Keys faltantes → merge con defaults
+- Keys extra → preservadas
+- Daily offset: set, get, persistencia, fechas independientes
+- Alert tracking: marcar, verificar, diferente día, persistencia
+- Round-trip completo: save + reload
 
 ## Estructura del proyecto
 
@@ -128,18 +179,21 @@ claude-monitor/
 │   ├── __init__.py
 │   ├── __main__.py        # python -m claude_monitor
 │   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport
-│   ├── config.py          # Precios por modelo, constantes
+│   ├── config.py          # Precios por modelo, constantes, ConfigManager
 │   ├── log_parser.py      # ClaudeLogParser: lectura y parsing de JSONL
 │   ├── cli.py             # Reporte formateado en terminal
-│   └── app.py             # App de barra de menú (rumps)
+│   └── app.py             # App de barra de menú (rumps) con alertas y reset
 ├── tests/
 │   ├── test_models.py
 │   ├── test_parser.py
+│   ├── test_config.py
 │   └── fixtures/
 │       ├── sample_session.jsonl
 │       ├── sample_subagent.jsonl
 │       ├── malformed.jsonl
 │       └── empty.jsonl
+├── run_app.py             # Entry point para PyInstaller
+├── setup.py               # Build script (PyInstaller → .app)
 ├── CLAUDE.md              # Especificación del proyecto
 ├── PLAN.md                # Plan de desarrollo por etapas
 ├── requirements.txt
