@@ -4,13 +4,9 @@ A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.a
 
 ## Screenshot
 
-<!-- TODO: Replace this with an actual screenshot of the app running -->
-![Claude Monitor in action](screenshot.png)
-<!-- Delete the line above and uncomment below if you prefer a centered image:
 <p align="center">
   <img src="screenshot.png" alt="Claude Monitor menu bar app" width="400">
 </p>
--->
 
 ## Features
 
