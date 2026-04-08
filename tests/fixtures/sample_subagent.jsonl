@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"sub task"}]},"uuid":"su1","timestamp":"2026-04-08T14:10:00.000Z","cwd":"/Users/testuser/Projects/my-cool-project","sessionId":"sess-sub-001"}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","id":"msg_haiku_sub_001","type":"message","role":"assistant","content":[{"type":"text","text":"subagent result"}],"usage":{"input_tokens":500,"output_tokens":200,"cache_read_input_tokens":1000,"cache_creation_input_tokens":0,"service_tier":"standard"}},"timestamp":"2026-04-08T14:10:05.000Z"}
