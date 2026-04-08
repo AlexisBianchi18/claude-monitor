@@ -1,76 +1,74 @@
 # Claude Code Cost Monitor
 
-Aplicación para macOS que monitorea en tiempo real el costo y uso de tokens de Claude Code, leyendo los logs locales de `~/.claude/projects/` sin necesidad de API keys.
+A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.ai/code) spending and token usage in real time — by reading local logs from `~/.claude/projects/`. No API keys required.
 
-## Estado actual
+## Screenshot
 
-**Etapa 3 completada** — App empaquetada como .app standalone para macOS.
+<!-- TODO: Replace this with an actual screenshot of the app running -->
+![Claude Monitor in action](screenshot.png)
+<!-- Delete the line above and uncomment below if you prefer a centered image:
+<p align="center">
+  <img src="screenshot.png" alt="Claude Monitor menu bar app" width="400">
+</p>
+-->
 
-| Etapa | Descripción | Estado |
-|-------|-------------|--------|
-| 1 | Parser + CLI Report | ✅ |
-| 2 | App en barra de menú (rumps) | ✅ |
-| 3 | Pulido, alertas y empaquetado (.app) | ✅ |
+## Features
 
-## Qué hace
+- **Real-time cost tracking** — displays `C $X.XX` in the macOS menu bar, auto-refreshes every 30 seconds
+- **Per-project breakdown** — see which projects are costing you the most
+- **Weekly summary** — 7-day history with daily averages
+- **Cost alerts** — native macOS notification when spending exceeds a configurable threshold (default: $5.00), title changes to `⚠ $X.XX`
+- **Daily reset** — reset the counter to $0.00 without losing data
+- **CLI report** — formatted terminal output for quick checks
+- **Standalone .app** — package as a native macOS app (~22 MB), no Dock icon
+- **Privacy-first** — only reads numeric fields (`usage`, `costUSD`, `timestamp`, `model`). Never reads prompt content.
+- **Fully offline** — no network calls, everything is computed locally
 
-- Parsea archivos JSONL de `~/.claude/projects/` (sesiones + subagentes)
-- Calcula costos por modelo usando tokens × precios públicos
-- Deduplica mensajes repetidos por streaming (mismo `message.id`)
-- Agrupa por proyecto con nombres legibles extraídos del campo `cwd`
-- Filtra por fecha con conversión UTC → zona horaria local
+## Requirements
 
-## Requisitos
-
-- Python 3.11+
 - macOS 12+
-- [uv](https://docs.astral.sh/uv/) (gestor de paquetes)
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended package manager)
 
-## Instalación
+## Installation
 
 ```bash
-# Crear entorno virtual
-uv venv
+git clone https://github.com/YOUR_USERNAME/claude-monitor.git
+cd claude-monitor
 
-# Instalar dependencias
+# Create virtual environment and install dependencies
+uv venv
 uv pip install rumps
 
-# Instalar dependencias de desarrollo
+# (Optional) Install dev dependencies
 uv pip install pytest
 ```
 
-## Uso
+## Usage
 
-### App en barra de menú (Etapa 2)
+### Menu Bar App
 
 ```bash
 .venv/bin/python -m claude_monitor.app
 ```
 
-Aparece un icono `C $X.XX` en la barra de menú de macOS. Al hacer click muestra:
+The menu shows:
 
-- Costo total del día con cantidad de llamadas y tokens
-- Desglose por proyecto (hasta 10 proyectos)
-- Resumen semanal con promedio diario
-- Botón "Refresh Now" para actualizar manualmente
-- Botón "Quit" para cerrar
+| Item | Description |
+|------|-------------|
+| Today's total | Cost, API calls, and token count |
+| Project list | Up to 10 projects sorted by cost |
+| Weekly summary | 7-day total with daily average |
+| Refresh Now | Force an immediate update |
+| Reset Daily Counter | Zero out today's display (preserves actual data) |
+| Preferences | Open `config.json` in TextEdit |
+| Quit | Exit the app |
 
-Se auto-refresca cada 30 segundos. Si el costo supera $5.00, el título cambia a `⚠ $X.XX` y envía una notificación de macOS (una vez por día).
-
-Funcionalidades adicionales (Etapa 3):
-
-- **Reset Daily Counter**: Resetea el contador del día a $0.00 (guarda el costo actual como offset)
-- **Preferences**: Abre el archivo de configuración `~/.claude-monitor/config.json` con TextEdit
-- **Alertas nativas**: Notificación de macOS cuando el costo supera el umbral (configurable)
-- **Configuración persistente**: Todos los ajustes se guardan en `~/.claude-monitor/config.json`
-
-### Reporte en terminal
+### CLI Report
 
 ```bash
 .venv/bin/python -m claude_monitor.cli
 ```
-
-Salida ejemplo:
 
 ```
 ============================================================
@@ -94,27 +92,24 @@ Salida ejemplo:
          Week  $59.0189  (avg $8.4313/day)
 ```
 
-### Empaquetar como .app (Etapa 3)
+### Build Standalone .app
 
 ```bash
-# Instalar PyInstaller
 uv pip install pyinstaller
 
-# Build de producción (standalone)
 .venv/bin/python setup.py
 
-# Abrir la app
 open dist/Claude\ Monitor.app
 ```
 
-La app empaquetada (~22 MB):
-- No aparece en el Dock (`LSUIElement: true`)
-- Es standalone (incluye Python y todas las dependencias)
-- Se puede copiar a `/Applications/`
+The packaged app:
+- Runs standalone (bundles Python and all dependencies)
+- Doesn't appear in the Dock (`LSUIElement: true`)
+- Can be copied to `/Applications/`
 
-### Configuración
+## Configuration
 
-La app guarda su configuración en `~/.claude-monitor/config.json`:
+Settings are stored in `~/.claude-monitor/config.json` (created automatically with defaults on first run):
 
 ```json
 {
@@ -124,54 +119,19 @@ La app guarda su configuración en `~/.claude-monitor/config.json`:
 }
 ```
 
-Se puede editar desde el menú (Preferences) o manualmente.
+Edit via the Preferences menu item or manually.
 
-## Tests
+## Supported Models & Pricing
 
-```bash
-# Ejecutar todos los tests
-.venv/bin/python -m pytest tests/ -v
+| Model | Input ($/M tokens) | Output ($/M tokens) | Cache Read ($/M) | Cache Create ($/M) |
+|-------|-------------------:|--------------------:|------------------:|--------------------:|
+| claude-opus-4-6 | 15.00 | 75.00 | 1.50 | 18.75 |
+| claude-sonnet-4-6 | 3.00 | 15.00 | 0.30 | 3.75 |
+| claude-haiku-4-5-20251001 | 0.80 | 4.00 | 0.08 | 1.00 |
 
-# Ejecutar solo tests del parser
-.venv/bin/python -m pytest tests/test_parser.py -v
+Prices can be updated in [config.py](claude_monitor/config.py). When a log entry includes `costUSD`, that value is used directly; otherwise cost is estimated from token counts.
 
-# Ejecutar solo tests de modelos
-.venv/bin/python -m pytest tests/test_models.py -v
-
-# Ejecutar solo tests de configuración
-.venv/bin/python -m pytest tests/test_config.py -v
-```
-
-### Cobertura de tests (50 tests)
-
-- Directorio inexistente → reporte vacío sin error
-- Archivos vacíos y líneas JSON malformadas → se ignoran
-- Tipos no-assistant (user, queue-operation, attachment, ai-title) → se ignoran
-- Modelo `<synthetic>` → se ignora
-- Deduplicación por `message.id` → solo cuenta el último
-- Cálculo de costo correcto para Opus, Sonnet y Haiku
-- Modelo desconocido → costo $0.00
-- Filtrado por fecha (ayer excluido, hoy incluido)
-- Parsing de timestamps UTC con `Z` y con offset
-- Subagentes incluidos desde `<session>/subagents/*.jsonl`
-- Nombre de proyecto extraído desde campo `cwd`; fallback al nombre de directorio
-- Proyectos ordenados por costo descendente
-- Entry sin campo `usage` → se ignora
-- Tokens de cache faltantes → default 0
-- Directorio `memory/` ignorado
-- Archivos `.meta.json` ignorados
-- Reporte semanal retorna 7 días ordenados
-- ConfigManager crea directorio y archivo si no existen
-- Config con JSON corrupto → usa defaults
-- Config con JSON array → usa defaults
-- Config vacío → usa defaults
-- Keys faltantes → merge con defaults
-- Keys extra → preservadas
-- Daily offset: set, get, persistencia, fechas independientes
-- Alert tracking: marcar, verificar, diferente día, persistencia
-- Round-trip completo: save + reload
-
-## Estructura del proyecto
+## Project Structure
 
 ```
 claude-monitor/
@@ -179,10 +139,10 @@ claude-monitor/
 │   ├── __init__.py
 │   ├── __main__.py        # python -m claude_monitor
 │   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport
-│   ├── config.py          # Precios por modelo, constantes, ConfigManager
-│   ├── log_parser.py      # ClaudeLogParser: lectura y parsing de JSONL
-│   ├── cli.py             # Reporte formateado en terminal
-│   └── app.py             # App de barra de menú (rumps) con alertas y reset
+│   ├── config.py          # Model pricing, constants, ConfigManager
+│   ├── log_parser.py      # ClaudeLogParser: JSONL reading and parsing
+│   ├── cli.py             # Formatted terminal report
+│   └── app.py             # Menu bar app (rumps) with alerts and reset
 ├── tests/
 │   ├── test_models.py
 │   ├── test_parser.py
@@ -192,20 +152,43 @@ claude-monitor/
 │       ├── sample_subagent.jsonl
 │       ├── malformed.jsonl
 │       └── empty.jsonl
-├── run_app.py             # Entry point para PyInstaller
+├── run_app.py             # Entry point for PyInstaller
 ├── setup.py               # Build script (PyInstaller → .app)
-├── CLAUDE.md              # Especificación del proyecto
-├── PLAN.md                # Plan de desarrollo por etapas
 ├── requirements.txt
+├── CLAUDE.md              # Project specification
 └── README.md
 ```
 
-## Modelos soportados y precios
+## Tests
 
-| Modelo | Input ($/M) | Output ($/M) | Cache Read ($/M) | Cache Create ($/M) |
-|--------|-------------|--------------|-------------------|---------------------|
-| claude-opus-4-6 | 15.00 | 75.00 | 1.50 | 18.75 |
-| claude-sonnet-4-6 | 3.00 | 15.00 | 0.30 | 3.75 |
-| claude-haiku-4-5-20251001 | 0.80 | 4.00 | 0.08 | 1.00 |
+```bash
+# Run all tests (50 tests)
+.venv/bin/python -m pytest tests/ -v
+```
 
-Los precios se pueden actualizar en [config.py](claude_monitor/config.py).
+Test coverage includes:
+- Missing log directory returns empty report without errors
+- Malformed JSON lines and empty files are skipped gracefully
+- Non-assistant message types (`user`, `queue-operation`, `attachment`, `ai-title`) are ignored
+- Synthetic model entries are ignored
+- Deduplication by `message.id` (only the latest counts)
+- Correct cost calculation for Opus, Sonnet, and Haiku
+- Unknown models default to $0.00
+- Date filtering (yesterday excluded, today included)
+- UTC timestamp parsing with `Z` and offset formats
+- Subagent sessions from `<session>/subagents/*.jsonl`
+- Project name extraction from `cwd` field with directory name fallback
+- Config creation, corruption recovery, and merge behavior
+- Daily offset and alert tracking persistence
+
+## How It Works
+
+1. **Reads** JSONL session files from `~/.claude/projects/` (including subagent logs)
+2. **Parses** only numeric fields — token counts, costs, timestamps, and model names
+3. **Deduplicates** streaming messages by `message.id`
+4. **Groups** entries by project (extracted from `cwd` in the logs)
+5. **Displays** the running total in the menu bar, updated every 30 seconds
+
+## License
+
+MIT
