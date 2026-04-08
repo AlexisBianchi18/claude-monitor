@@ -4,12 +4,12 @@ Aplicación para macOS que monitorea en tiempo real el costo y uso de tokens de 
 
 ## Estado actual
 
-**Etapa 1 completada** — Parser de logs + reporte en terminal.
+**Etapa 2 completada** — App en barra de menú de macOS.
 
 | Etapa | Descripción | Estado |
 |-------|-------------|--------|
 | 1 | Parser + CLI Report | ✅ |
-| 2 | App en barra de menú (rumps) | Pendiente |
+| 2 | App en barra de menú (rumps) | ✅ |
 | 3 | Pulido, alertas y empaquetado (.app) | Pendiente |
 
 ## Qué hace
@@ -32,11 +32,30 @@ Aplicación para macOS que monitorea en tiempo real el costo y uso de tokens de 
 # Crear entorno virtual
 uv venv
 
+# Instalar dependencias
+uv pip install rumps
+
 # Instalar dependencias de desarrollo
 uv pip install pytest
 ```
 
 ## Uso
+
+### App en barra de menú (Etapa 2)
+
+```bash
+.venv/bin/python -m claude_monitor.app
+```
+
+Aparece un icono `C $X.XX` en la barra de menú de macOS. Al hacer click muestra:
+
+- Costo total del día con cantidad de llamadas y tokens
+- Desglose por proyecto (hasta 10 proyectos)
+- Resumen semanal con promedio diario
+- Botón "Refresh Now" para actualizar manualmente
+- Botón "Quit" para cerrar
+
+Se auto-refresca cada 30 segundos. Si el costo supera $5.00, el título cambia a `⚠ $X.XX`.
 
 ### Reporte en terminal
 
@@ -111,7 +130,8 @@ claude-monitor/
 │   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport
 │   ├── config.py          # Precios por modelo, constantes
 │   ├── log_parser.py      # ClaudeLogParser: lectura y parsing de JSONL
-│   └── cli.py             # Reporte formateado en terminal
+│   ├── cli.py             # Reporte formateado en terminal
+│   └── app.py             # App de barra de menú (rumps)
 ├── tests/
 │   ├── test_models.py
 │   ├── test_parser.py
