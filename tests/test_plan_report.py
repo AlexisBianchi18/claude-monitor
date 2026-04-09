@@ -116,7 +116,9 @@ class TestGetPlanReport:
         )
         assert report.overall_percentage == 0.0
         assert report.equivalent_api_cost == 0.0
-        assert report.models == []
+        # All configured models present, but with 0 tokens
+        assert len(report.models) == len(PLAN_LIMITS)
+        assert all(m.tokens_used == 0 for m in report.models)
 
     def test_models_only_for_configured_limits(self, logs_with_usage):
         parser = ClaudeLogParser(logs_dir=logs_with_usage)

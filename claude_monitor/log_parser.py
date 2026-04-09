@@ -79,8 +79,6 @@ class ClaudeLogParser:
         models: list[ModelUsageStatus] = []
         for model, limit in sorted(daily_limits.items()):
             tokens_used = daily.tokens_by_model.get(model, 0)
-            if tokens_used == 0:
-                continue
             models.append(ModelUsageStatus(
                 model=model,
                 tokens_used=tokens_used,
