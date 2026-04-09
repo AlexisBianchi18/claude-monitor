@@ -315,3 +315,84 @@ class TestPlanConfig:
         mgr2 = ConfigManager(config_path=config_path)
         assert mgr2.last_update_check != ""
         assert mgr2.should_check_for_update() is False
+
+
+class TestExtraUsageConfig:
+    def test_extra_usage_limit_default_zero(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.extra_usage_limit_usd == 0.0
+
+    def test_extra_usage_alert_pct_default_90(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.extra_usage_alert_pct == 90.0
+
+    def test_set_extra_usage_limit(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_limit(60.0)
+        assert mgr.extra_usage_limit_usd == 60.0
+
+    def test_set_extra_usage_limit_clamps_negative(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_limit(-10.0)
+        assert mgr.extra_usage_limit_usd == 0.0
+
+    def test_set_extra_usage_limit_persists(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_limit(40.0)
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.extra_usage_limit_usd == 40.0
+
+    def test_set_extra_usage_alert_pct(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_alert_pct(80.0)
+        assert mgr.extra_usage_alert_pct == 80.0
+
+    def test_set_extra_usage_alert_pct_clamps_low(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_alert_pct(-5.0)
+        assert mgr.extra_usage_alert_pct == 0.0
+
+    def test_set_extra_usage_alert_pct_clamps_high(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_alert_pct(150.0)
+        assert mgr.extra_usage_alert_pct == 100.0
+
+    def test_set_extra_usage_alert_pct_persists(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_alert_pct(75.0)
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.extra_usage_alert_pct == 75.0
+
+    def test_extra_alert_not_fired_by_default(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.has_extra_alert_fired_today(date(2026, 4, 9)) is False
+
+    def test_mark_and_check_extra_alert(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_extra_alert_fired(date(2026, 4, 9))
+        assert mgr.has_extra_alert_fired_today(date(2026, 4, 9)) is True
+
+    def test_extra_alert_different_day(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_extra_alert_fired(date(2026, 4, 9))
+        assert mgr.has_extra_alert_fired_today(date(2026, 4, 10)) is False
+
+    def test_extra_alert_independent_from_cost_alert(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_alert_fired(date(2026, 4, 9))
+        assert mgr.has_extra_alert_fired_today(date(2026, 4, 9)) is False
+
+    def test_extra_alert_persists(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_extra_alert_fired(date(2026, 4, 9))
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.has_extra_alert_fired_today(date(2026, 4, 9)) is True
+
+    def test_load_extra_usage_from_file(self, config_path):
+        config_path.write_text(json.dumps({
+            "extra_usage_limit_usd": 100.0,
+            "extra_usage_alert_pct": 85.0,
+        }))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.extra_usage_limit_usd == 100.0
+        assert mgr.extra_usage_alert_pct == 85.0

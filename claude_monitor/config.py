@@ -87,6 +87,8 @@ class ConfigManager:
         "reset_hour_utc": DEFAULT_RESET_HOUR_UTC,
         "auto_update_enabled": True,
         "last_update_check": "",
+        "extra_usage_limit_usd": 0.0,
+        "extra_usage_alert_pct": 90.0,
     }
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -225,6 +227,37 @@ class ConfigManager:
         """Alterna entre 'bar' y 'text' y persiste."""
         current = self.display_style
         self._data["display_style"] = "text" if current == "bar" else "bar"
+        self.save()
+
+    # --- Extra usage ---
+
+    @property
+    def extra_usage_limit_usd(self) -> float:
+        """Limite de extra usage en USD. 0 = deshabilitado."""
+        return float(self._data.get("extra_usage_limit_usd", 0.0))
+
+    @property
+    def extra_usage_alert_pct(self) -> float:
+        """Umbral de alerta para extra usage (0-100)."""
+        return float(self._data.get("extra_usage_alert_pct", 90.0))
+
+    def set_extra_usage_limit(self, limit: float) -> None:
+        """Guarda el limite de extra usage y persiste."""
+        self._data["extra_usage_limit_usd"] = max(0.0, limit)
+        self.save()
+
+    def set_extra_usage_alert_pct(self, pct: float) -> None:
+        """Guarda el umbral de alerta de extra usage y persiste."""
+        self._data["extra_usage_alert_pct"] = max(0.0, min(100.0, pct))
+        self.save()
+
+    def has_extra_alert_fired_today(self, target_date: date) -> bool:
+        """Verifica si la alerta de extra usage ya se disparo hoy."""
+        return self._data.get("last_extra_alert_date") == target_date.isoformat()
+
+    def mark_extra_alert_fired(self, target_date: date) -> None:
+        """Marca que la alerta de extra usage se disparo hoy y persiste."""
+        self._data["last_extra_alert_date"] = target_date.isoformat()
         self.save()
 
     # --- Auto-update ---
