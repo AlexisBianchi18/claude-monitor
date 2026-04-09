@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import BILLABLE_TYPE, CLAUDE_LOGS_DIR, SKIP_MODELS
 from .pricing_fetcher import get_pricing_table
-from .models import CostEntry, DailyReport, ProjectStats, TokenUsage
+from .models import CostEntry, DailyReport, ModelUsageStatus, PlanReport, ProjectStats, TokenUsage
 
 
 class ClaudeLogParser:
@@ -30,13 +30,18 @@ class ClaudeLogParser:
 
         projects: list[ProjectStats] = []
         all_models: set[str] = set()
+        all_tokens_by_model: dict[str, int] = {}
         for entry in self.logs_dir.iterdir():
             if not entry.is_dir() or entry.name == "memory":
                 continue
-            stats, models = self._parse_project(entry, target_date)
+            stats, models, model_tokens = self._parse_project(entry, target_date)
             if stats.entry_count > 0:
                 projects.append(stats)
                 all_models.update(models)
+                for model, tokens in model_tokens.items():
+                    all_tokens_by_model[model] = (
+                        all_tokens_by_model.get(model, 0) + tokens
+                    )
 
         projects.sort(key=lambda p: p.total_cost, reverse=True)
 
@@ -51,21 +56,65 @@ class ClaudeLogParser:
             entry_count=entry_count,
             projects=projects,
             models_used=all_models,
+            tokens_by_model=all_tokens_by_model,
         )
 
     def get_weekly_report(self) -> list[DailyReport]:
         """Retorna reportes de los últimos 7 días (de más antiguo a más reciente)."""
-        from datetime import timedelta
-
         today = date.today()
         return [
             self.get_daily_report(today - timedelta(days=i)) for i in range(6, -1, -1)
         ]
 
+    def get_plan_report(
+        self,
+        plan_name: str,
+        daily_limits: dict[str, int],
+        reset_hour_utc: int = 7,
+        target_date: date | None = None,
+    ) -> PlanReport:
+        """Genera un reporte de uso para modo suscripcion."""
+        daily = self.get_daily_report(target_date)
+
+        models: list[ModelUsageStatus] = []
+        for model, limit in sorted(daily_limits.items()):
+            tokens_used = daily.tokens_by_model.get(model, 0)
+            models.append(ModelUsageStatus(
+                model=model,
+                tokens_used=tokens_used,
+                tokens_limit=limit,
+            ))
+
+        estimated_reset = self._estimate_next_reset(reset_hour_utc)
+
+        return PlanReport(
+            plan_name=plan_name,
+            models=models,
+            estimated_reset=estimated_reset,
+            equivalent_api_cost=daily.total_cost,
+        )
+
+    @staticmethod
+    def _estimate_next_reset(reset_hour_utc: int) -> datetime:
+        """Calcula el proximo reset basado en la hora UTC configurada."""
+        now = datetime.now(timezone.utc)
+        today_reset = now.replace(
+            hour=reset_hour_utc, minute=0, second=0, microsecond=0
+        )
+        if now >= today_reset:
+            return today_reset + timedelta(days=1)
+        return today_reset
+
     # --- Parsing interno ---
 
-    def _parse_project(self, project_dir: Path, target_date: date) -> ProjectStats:
-        """Parsea todos los archivos de sesión de un proyecto."""
+    def _parse_project(
+        self, project_dir: Path, target_date: date
+    ) -> tuple[ProjectStats, set[str], dict[str, int]]:
+        """Parsea todos los archivos de sesion de un proyecto.
+
+        Returns:
+            (stats, models_used, model_tokens)
+        """
         session_files = self._find_session_files(project_dir)
         name, display_name = self._extract_project_name(project_dir, session_files)
 
@@ -75,6 +124,10 @@ class ClaudeLogParser:
 
         models_used = {e.model for e in all_entries if e.model}
 
+        model_tokens: dict[str, int] = {}
+        for e in all_entries:
+            model_tokens[e.model] = model_tokens.get(e.model, 0) + e.usage.total_tokens
+
         stats = ProjectStats(
             name=name,
             display_name=display_name,
@@ -83,7 +136,7 @@ class ClaudeLogParser:
             total_tokens=sum(e.usage.total_tokens for e in all_entries),
             entry_count=len(all_entries),
         )
-        return stats, models_used
+        return stats, models_used, model_tokens
 
     def _parse_jsonl_file(
         self, path: Path, target_date: date
