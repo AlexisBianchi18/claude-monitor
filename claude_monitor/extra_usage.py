@@ -24,6 +24,9 @@ def calculate_extra_usage(
     extra_tokens = max(0, total_used - total_limit)
 
     if total_used > 0:
+        # Proporcion: el costo extra es la fraccion de tokens que exceden
+        # el limite, aplicada al costo API total. Valido porque ambos
+        # valores comparten el mismo mix de modelos y ventana de tiempo.
         extra_cost = (extra_tokens / total_used) * plan_report.equivalent_api_cost
     else:
         extra_cost = 0.0

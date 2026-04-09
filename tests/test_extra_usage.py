@@ -73,6 +73,14 @@ def _make_plan_report(
 
 
 class TestCalculateExtraUsage:
+    def test_returns_none_when_limit_negative(self):
+        report = _make_plan_report(
+            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
+            equivalent_api_cost=75.0,
+        )
+        result = calculate_extra_usage(report, extra_limit_usd=-1.0, alert_threshold_pct=90.0)
+        assert result is None
+
     def test_returns_none_when_limit_zero(self):
         report = _make_plan_report(
             [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
