@@ -399,7 +399,18 @@ class ClaudeMonitorApp(rumps.App):
                     api_cost = cost_report.total_cost_usd
                     display_cost = max(0.0, api_cost - offset)
 
-        self._update_title(display_cost, today, api_source=api_cost is not None)
+        selected = self.config.selected_model
+        model_suffix = ""
+        if selected and selected in report.cost_by_model:
+            shown_cost = report.cost_by_model[selected]
+            model_suffix = f" {_short_model_name(selected)}"
+        else:
+            shown_cost = display_cost
+
+        self._update_title(
+            shown_cost, display_cost, today,
+            api_source=api_cost is not None, model_suffix=model_suffix,
+        )
         self._update_menu(
             report, weekly, display_cost, rate_limits_map, api_cost is not None
         )
@@ -427,14 +438,24 @@ class ClaudeMonitorApp(rumps.App):
             self.config.extra_usage_alert_pct,
         )
 
-        if extra is None:
+        selected = self.config.selected_model
+        if selected:
+            model_status = next(
+                (m for m in plan_report.models if m.model == selected), None
+            )
+            pct = model_status.percentage if model_status else 0.0
+            model_suffix = f" {_short_model_name(selected)}"
+        else:
             pct = plan_report.overall_percentage
+            model_suffix = ""
+
+        if extra is None:
             if pct >= 95:
-                self.title = f"\U0001f534 {pct:.1f}%"
+                self.title = f"\U0001f534 {pct:.1f}%{model_suffix}"
             elif pct >= 80:
-                self.title = f"\u26a0 {pct:.1f}%"
+                self.title = f"\u26a0 {pct:.1f}%{model_suffix}"
             else:
-                self.title = f"C {pct:.1f}%"
+                self.title = f"C {pct:.1f}%{model_suffix}"
         else:
             if extra.is_exhausted:
                 self.title = f"\U0001f534 ${extra.cost_usd:.2f}/${extra.limit_usd:.0f}"
@@ -481,17 +502,30 @@ class ClaudeMonitorApp(rumps.App):
         items.append(today_item)
         items.append(rumps.separator)
 
-        # Per-model usage
+        # Model filter: "All" item + per-model items with selection
+        selected = self.config.selected_model
+        all_prefix = "\u2713" if not selected else "  "
+        all_item = rumps.MenuItem(
+            f"{all_prefix} All models",
+            callback=lambda sender: self._on_select_model(None),
+        )
+        _apply_mono_style(all_item)
+        items.append(all_item)
+
         for m in plan_report.models:
             short_name = m.model.replace("claude-", "").replace("-20251001", "")
+            prefix = "\u2713" if selected == m.model else "  "
             if style == "bar":
                 bar = _render_bar(m.percentage)
-                line = f"  {short_name:<14}{bar} {m.percentage:>5.1f}%"
+                line = f"{prefix} {short_name:<14}{bar} {m.percentage:>5.1f}%"
             else:
                 used_str = _format_tokens_short(m.tokens_used)
                 limit_str = _format_tokens_short(m.tokens_limit)
-                line = f"  {short_name:<14}{used_str:>5} / {limit_str:<5}"
-            model_item = rumps.MenuItem(line, callback=_noop)
+                line = f"{prefix} {short_name:<14}{used_str:>5} / {limit_str:<5}"
+            model_item = rumps.MenuItem(
+                line,
+                callback=lambda sender, model=m.model: self._on_select_model(model),
+            )
             _apply_mono_style(model_item)
             items.append(model_item)
 
@@ -570,22 +604,28 @@ class ClaudeMonitorApp(rumps.App):
         self.menu = items
 
     def _update_title(
-        self, display_cost: float, today: date, *, api_source: bool = False
+        self,
+        shown_cost: float,
+        alert_cost: float,
+        today: date,
+        *,
+        api_source: bool = False,
+        model_suffix: str = "",
     ) -> None:
         threshold = self.config.alert_threshold
         suffix = " \u2713" if api_source else ""
-        if display_cost >= threshold:
-            self.title = f"\u26a0 ${display_cost:.2f}{suffix}"
-            # Enviar notificación una vez por día
+        if alert_cost >= threshold:
+            self.title = f"\u26a0 ${shown_cost:.2f}{suffix}{model_suffix}"
+            # Enviar notificacion una vez por dia (basada en costo total, no filtrado)
             if not self.config.has_alert_fired_today(today):
                 self.config.mark_alert_fired(today)
                 rumps.notification(
                     title="Claude Code Cost Alert",
                     subtitle=f"Daily cost exceeded ${threshold:.2f}",
-                    message=f"Current cost: ${display_cost:.2f}",
+                    message=f"Current cost: ${alert_cost:.2f}",
                 )
         else:
-            self.title = f"C ${display_cost:.2f}{suffix}"
+            self.title = f"C ${shown_cost:.2f}{suffix}{model_suffix}"
 
     def _update_api_status(self) -> None:
         if not self.config.has_api_key:
@@ -614,6 +654,7 @@ class ClaudeMonitorApp(rumps.App):
         self,
         project_items: list[rumps.MenuItem] | None = None,
         rate_limits_map: dict[str, RateLimitInfo] | None = None,
+        model_items: list[rumps.MenuItem] | None = None,
     ) -> list:
         items: list = []
 
@@ -632,6 +673,10 @@ class ClaudeMonitorApp(rumps.App):
 
         if project_items:
             items.extend(project_items)
+
+        if model_items:
+            items.append(rumps.separator)
+            items.extend(model_items)
 
         items.append(self._separator2)
         items.append(self._week_item)
@@ -679,6 +724,28 @@ class ClaudeMonitorApp(rumps.App):
             _apply_mono_style(item)
             project_items.append(item)
 
+        # Model items for filter
+        selected = self.config.selected_model
+        model_items: list[rumps.MenuItem] = []
+        if report.models_used:
+            all_prefix = "\u2713" if not selected else "  "
+            all_item = rumps.MenuItem(
+                f"{all_prefix} All models",
+                callback=lambda sender: self._on_select_model(None),
+            )
+            _apply_mono_style(all_item)
+            model_items.append(all_item)
+            for model in sorted(report.models_used):
+                short = model.replace("claude-", "").replace("-20251001", "")
+                cost = report.cost_by_model.get(model, 0.0)
+                prefix = "\u2713" if selected == model else "  "
+                item = rumps.MenuItem(
+                    f"{prefix} {short:<14} ${cost:.2f}",
+                    callback=lambda sender, m=model: self._on_select_model(m),
+                )
+                _apply_mono_style(item)
+                model_items.append(item)
+
         # Weekly summary
         week_total = sum(r.total_cost for r in weekly)
         avg = week_total / len(weekly) if weekly else 0.0
@@ -688,7 +755,7 @@ class ClaudeMonitorApp(rumps.App):
 
         # Reconstruir menu
         self.menu.clear()
-        self.menu = self._build_menu_items(project_items, rate_limits_map)
+        self.menu = self._build_menu_items(project_items, rate_limits_map, model_items)
 
 
 def main() -> None:
