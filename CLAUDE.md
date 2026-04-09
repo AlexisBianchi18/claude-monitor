@@ -59,9 +59,9 @@ tests/
 │   ├── empty.jsonl
 │   └── malformed.jsonl
 docs/
-├── features/              — sistema de gestion de features (un .md por feature)
-│   └── _template.md       — plantilla para nuevas features
 ├── private/               — submodulo git privado (solo owner, no visible publicamente)
+│   ├── features/          — sistema de gestion de features (un .md por feature)
+│   │   └── _template.md   — plantilla para nuevas features
 │   ├── plans/             — planes de desarrollo
 │   └── memory/            — notas de sesiones de desarrollo con IA
 .github/
@@ -218,12 +218,12 @@ uv run python setup.py   # genera bundle .app con LSUIElement=True (no aparece e
 
 ## Sistema de gestion de features
 
-Las features futuras se gestionan como archivos Markdown en `docs/features/`.
+Las features futuras se gestionan como archivos Markdown en `docs/private/features/`.
 
 ### Estructura
 
-- Un archivo `.md` por feature: `docs/features/{NNN}-{slug}.md`
-- Plantilla base: `docs/features/_template.md`
+- Un archivo `.md` por feature: `docs/private/features/{NNN}-{slug}.md`
+- Plantilla base: `docs/private/features/_template.md`
 - Frontmatter YAML con: id, title, status, priority, complexity, created, updated, tags, plan
 
 ### Estados
