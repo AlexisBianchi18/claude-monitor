@@ -1,6 +1,28 @@
 # Claude Code Cost Monitor
 
+> **macOS only** — requires macOS 12+
+
 A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.ai/code) spending and token usage in real time — by reading local logs from `~/.claude/projects/`. No API keys required.
+
+## Installation
+
+```bash
+git clone https://github.com/SirMatoran/claude-monitor.git
+cd claude-monitor
+```
+
+### Option A: Download the .app (recommended)
+
+Download `Claude.Monitor.app.zip` from the [latest release](https://github.com/SirMatoran/claude-monitor/releases/latest), unzip, and move to `/Applications/`.
+
+### Option B: Run from source
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync
+uv run python -m claude_monitor
+```
 
 ## Screenshot
 
@@ -10,60 +32,70 @@ A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.a
 
 ## Features
 
-- **Real-time cost tracking** — displays `C $X.XX` in the macOS menu bar, auto-refreshes every 30 seconds
+- **Real-time cost tracking** — displays `C $0.42` in the macOS menu bar, auto-refreshes every 30 seconds
+- **Subscription mode** — switch to `C 45%` to track token usage against your plan limits (Pro, Max 5x, Max 20x)
 - **Per-project breakdown** — see which projects are costing you the most
 - **Weekly summary** — 7-day history with daily averages
-- **Cost alerts** — native macOS notification when spending exceeds a configurable threshold (default: $5.00), title changes to `⚠ $X.XX`
+- **Cost alerts** — native macOS notification when spending exceeds a configurable threshold (default: $5.00)
 - **Daily reset** — reset the counter to $0.00 without losing data
 - **CLI report** — formatted terminal output for quick checks
 - **Standalone .app** — package as a native macOS app (~22 MB), no Dock icon
 - **Auto-update** — checks GitHub Releases every 24h, one-click update from the menu
-- **Privacy-first** — only reads numeric fields (`usage`, `costUSD`, `timestamp`, `model`). Never reads prompt content.
-- **API integration (optional)** — connect your Anthropic API key to see real-time rate limit usage (% tokens used, reset countdown) and actual billing costs from the Admin API
+- **Privacy-first** — only reads numeric fields (`usage`, `timestamp`, `model`). Never reads prompt content.
+- **API integration (optional)** — connect your Anthropic API key to see real-time rate limit usage and actual billing costs
 - **Fully offline by default** — works without any API key, everything computed locally
-
-## Requirements
-
-- macOS 12+
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (recommended package manager)
-
-## Installation
-
-```bash
-git clone https://github.com/SirMatoran/claude-monitor.git
-cd claude-monitor
-
-# Create virtual environment and install dependencies
-uv venv
-uv pip install -r requirements.txt
-```
 
 ## Usage
 
 ### Menu Bar App
 
 ```bash
-.venv/bin/python -m claude_monitor.app
+uv run python -m claude_monitor
 ```
 
 The menu shows:
 
 | Item | Description |
 |------|-------------|
-| Today's total | Cost, API calls, and token count |
+| Today's total | Cost (or % in subscription mode), API calls, and token count |
 | Project list | Up to 10 projects sorted by cost |
 | Weekly summary | 7-day total with daily average |
+| Plan | Switch between Pro, Max 5x, Max 20x (subscription mode) |
 | Refresh Now | Force an immediate update |
 | Reset Daily Counter | Zero out today's display (preserves actual data) |
 | Preferences | Open `config.json` in TextEdit |
 | Update available | Shown when a newer version exists on GitHub (click to install) |
 | Quit | Exit the app |
 
+### Usage Modes
+
+The app has two modes, configurable in `~/.claude-monitor/config.json`:
+
+**API mode** (default) — shows estimated cost in USD based on token usage:
+```
+C $0.42
+```
+
+**Subscription mode** — shows percentage of plan limit consumed:
+```
+C 45%
+```
+
+To switch modes, edit `~/.claude-monitor/config.json`:
+
+```json
+{
+  "usage_mode": "subscription",
+  "plan": "max_5x"
+}
+```
+
+Available plans: `pro`, `max_5x`, `max_20x`. You can also change the plan from the menu.
+
 ### CLI Report
 
 ```bash
-.venv/bin/python -m claude_monitor.cli
+uv run python -m claude_monitor.cli
 ```
 
 ```
@@ -91,10 +123,8 @@ The menu shows:
 ### Build Standalone .app
 
 ```bash
-uv pip install pyinstaller
-
-.venv/bin/python setup.py
-
+uv run pip install pyinstaller
+uv run python setup.py
 open dist/Claude\ Monitor.app
 ```
 
@@ -103,17 +133,6 @@ The packaged app:
 - Doesn't appear in the Dock (`LSUIElement: true`)
 - Can be copied to `/Applications/`
 - Auto-updates when a new GitHub Release is published
-
-### Publishing a Release
-
-The app auto-updates via GitHub Releases. To publish a new version:
-
-1. Bump `__version__` in `claude_monitor/__init__.py`
-2. Commit and push
-3. Tag and push: `git tag v1.1.0 && git push origin v1.1.0`
-4. GitHub Actions builds the `.app` and creates the release automatically
-
-Users running the `.app` will see "Update available (v1.1.0)" in the menu within 24 hours.
 
 ## API Integration (Optional)
 
@@ -175,6 +194,9 @@ Settings are stored in `~/.claude-monitor/config.json` (created automatically wi
   "cost_alert_threshold_usd": 5.0,
   "max_projects_in_menu": 10,
   "anthropic_api_key": "",
+  "usage_mode": "api",
+  "plan": "max_5x",
+  "display_style": "bar",
   "auto_update_enabled": true
 }
 ```
@@ -183,13 +205,15 @@ Edit via the Preferences menu item or manually.
 
 ## Supported Models & Pricing
 
-| Model | Input ($/M tokens) | Output ($/M tokens) | Cache Read ($/M) | Cache Create ($/M) |
-|-------|-------------------:|--------------------:|------------------:|--------------------:|
-| claude-opus-4-6 | 15.00 | 75.00 | 1.50 | 18.75 |
-| claude-sonnet-4-6 | 3.00 | 15.00 | 0.30 | 3.75 |
-| claude-haiku-4-5-20251001 | 0.80 | 4.00 | 0.08 | 1.00 |
+Costs are estimated locally from token counts using these prices (USD per million tokens):
 
-Prices can be updated in [config.py](claude_monitor/config.py). When a log entry includes `costUSD`, that value is used directly; otherwise cost is estimated from token counts.
+| Model | Input | Output | Cache Read | Cache Create 5m | Cache Create 1h |
+|-------|------:|-------:|-----------:|----------------:|----------------:|
+| claude-opus-4-6 | $5.00 | $25.00 | $0.50 | $6.25 | $10.00 |
+| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30 | $3.75 | $6.00 |
+| claude-haiku-4-5 | $1.00 | $5.00 | $0.10 | $1.25 | $2.00 |
+
+The app also fetches updated prices from Anthropic's documentation automatically (cached for 24h). Prices can be overridden in [config.py](claude_monitor/config.py).
 
 ## Project Structure
 
@@ -198,69 +222,48 @@ claude-monitor/
 ├── claude_monitor/
 │   ├── __init__.py
 │   ├── __main__.py        # python -m claude_monitor
-│   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport, RateLimitInfo, ApiCostReport
+│   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport, etc.
 │   ├── config.py          # Model pricing, constants, ConfigManager
 │   ├── log_parser.py      # ClaudeLogParser: JSONL reading and parsing
 │   ├── api_client.py      # Anthropic API: rate limits and cost report
-│   ├── pricing_fetcher.py # Scraper de precios desde docs Anthropic
+│   ├── pricing_fetcher.py # Auto-fetch prices from Anthropic docs
 │   ├── updater.py         # Auto-update via GitHub Releases
 │   ├── cli.py             # Formatted terminal report
-│   └── app.py             # Menu bar app (rumps) with alerts, reset, and API integration
-├── tests/
-│   ├── test_models.py
-│   ├── test_parser.py
-│   ├── test_config.py
-│   ├── test_api_client.py
-│   ├── test_pricing_fetcher.py
-│   ├── test_updater.py
-│   └── fixtures/
-│       ├── sample_session.jsonl
-│       ├── sample_subagent.jsonl
-│       ├── malformed.jsonl
-│       └── empty.jsonl
+│   └── app.py             # Menu bar app (rumps)
+├── tests/                 # 188 tests
 ├── docs/
-│   ├── plans/             # Development plans (completed)
-│   └── memory/            # AI session development notes
-├── run_app.py             # Entry point for PyInstaller
 ├── .github/workflows/
 │   └── release.yml        # CI: build .app + create GitHub Release on tag push
 ├── setup.py               # Build script (PyInstaller → .app)
 ├── requirements.txt
-├── CLAUDE.md              # AI assistant specification
 └── README.md
 ```
 
 ## Tests
 
 ```bash
-# Run all tests (188 tests)
-uv run pytest tests/ -v
+uv run pytest
 ```
-
-Test coverage includes:
-- Missing log directory returns empty report without errors
-- Malformed JSON lines and empty files are skipped gracefully
-- Non-assistant message types (`user`, `queue-operation`, `attachment`, `ai-title`) are ignored
-- Synthetic model entries are ignored
-- Deduplication by `message.id` (only the latest counts)
-- Correct cost calculation for Opus, Sonnet, and Haiku
-- Unknown models default to $0.00
-- Date filtering (yesterday excluded, today included)
-- UTC timestamp parsing with `Z` and offset formats
-- Subagent sessions from `<session>/subagents/*.jsonl`
-- Project name extraction from `cwd` field with directory name fallback
-- Config creation, corruption recovery, and merge behavior
-- Daily offset and alert tracking persistence
-- Auto-update version comparison, GitHub API check, download and app replacement
-- Update config: 24h check cooldown, enable/disable toggle
 
 ## How It Works
 
 1. **Reads** JSONL session files from `~/.claude/projects/` (including subagent logs)
-2. **Parses** only numeric fields — token counts, costs, timestamps, and model names
+2. **Parses** only numeric fields — token counts, timestamps, and model names
 3. **Deduplicates** streaming messages by `message.id`
-4. **Groups** entries by project (extracted from `cwd` in the logs)
-5. **Displays** the running total in the menu bar, updated every 30 seconds
+4. **Calculates** cost using the pricing table (or fetches real costs via Admin API)
+5. **Groups** entries by project (extracted from `cwd` in the logs)
+6. **Displays** the running total in the menu bar, updated every 30 seconds
+
+## For Maintainers
+
+### Publishing a Release
+
+1. Bump `__version__` in `claude_monitor/__init__.py`
+2. Commit and push
+3. Tag and push: `git tag v1.1.0 && git push origin v1.1.0`
+4. GitHub Actions builds the `.app` and creates the release automatically
+
+Users running the `.app` will see "Update available (v1.1.0)" in the menu within 24 hours.
 
 ## License
 
