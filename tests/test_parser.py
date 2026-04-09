@@ -478,6 +478,28 @@ class TestMetaJsonIgnored:
         assert ".json" not in extensions  # solo .jsonl
 
 
+class TestTokensByModel:
+    def test_tokens_by_model_populated(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        assert isinstance(report.tokens_by_model, dict)
+        assert len(report.tokens_by_model) > 0
+        assert "claude-opus-4-6" in report.tokens_by_model
+        assert "claude-sonnet-4-6" in report.tokens_by_model
+        assert "claude-haiku-4-5-20251001" in report.tokens_by_model
+
+    def test_tokens_by_model_sums_correctly(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        model_total = sum(report.tokens_by_model.values())
+        assert model_total == report.total_tokens
+
+    def test_tokens_by_model_empty_when_no_data(self):
+        parser = ClaudeLogParser(logs_dir=Path("/nonexistent/path"))
+        report = parser.get_daily_report(TARGET_DATE)
+        assert report.tokens_by_model == {}
+
+
 # --- Weekly report ---
 
 
