@@ -33,6 +33,17 @@ PLAN_DISPLAY_NAMES: dict[str, str] = {
     "max_20x": "Max 20x",
 }
 
+MODEL_SHORT_NAMES: dict[str, str] = {
+    "claude-opus-4-6": "opus",
+    "claude-sonnet-4-6": "sonnet",
+    "claude-haiku-4-5-20251001": "haiku",
+}
+
+
+def _short_model_name(model: str) -> str:
+    """Nombre corto del modelo para el titulo: claude-opus-4-6 -> opus."""
+    return MODEL_SHORT_NAMES.get(model, model.replace("claude-", "").split("-")[0])
+
 
 def _noop(_sender: rumps.MenuItem) -> None:
     """No-op callback para mantener items habilitados (no grayed-out)."""
@@ -208,6 +219,15 @@ class ClaudeMonitorApp(rumps.App):
     def _on_toggle_style(self, sender: rumps.MenuItem) -> None:
         """Alterna entre estilo bar y text."""
         self.config.toggle_display_style()
+        self._refresh()
+
+    def _on_select_model(self, model: str | None) -> None:
+        """Selecciona o deselecciona un modelo para filtrar el titulo."""
+        current = self.config.selected_model
+        if model is not None and model == current:
+            self.config.set_selected_model(None)
+        else:
+            self.config.set_selected_model(model)
         self._refresh()
 
     def _on_configure_extra_usage(self, sender: rumps.MenuItem) -> None:
