@@ -34,6 +34,7 @@ uv run python -m claude_monitor
 
 - **Real-time cost tracking** — displays `C $0.42` in the macOS menu bar, auto-refreshes every 30 seconds
 - **Subscription mode** — switch to `C 45%` to track token usage against your plan limits (Pro, Max 5x, Max 20x)
+- **Extra usage tracking** — configurable budget for usage beyond plan limits; title switches to `C $12.50/$60` when in extra usage zone
 - **Per-project breakdown** — see which projects are costing you the most
 - **Weekly summary** — 7-day history with daily averages
 - **Cost alerts** — native macOS notification when spending exceeds a configurable threshold (default: $5.00)
@@ -61,6 +62,7 @@ The menu shows:
 | Project list | Up to 10 projects sorted by cost |
 | Weekly summary | 7-day total with daily average |
 | Plan | Switch between Pro, Max 5x, Max 20x (subscription mode) |
+| Extra Usage Limit | Configure extra usage budget in USD (subscription mode) |
 | Refresh Now | Force an immediate update |
 | Reset Daily Counter | Zero out today's display (preserves actual data) |
 | Preferences | Open `config.json` in TextEdit |
@@ -91,6 +93,26 @@ To switch modes, edit `~/.claude-monitor/config.json`:
 ```
 
 Available plans: `pro`, `max_5x`, `max_20x`. You can also change the plan from the menu.
+
+#### Extra Usage
+
+Claude allows spending beyond your plan limits at additional cost. To track this, configure an extra usage budget via the **Extra Usage Limit...** menu item or in `config.json`:
+
+```json
+{
+  "usage_mode": "subscription",
+  "plan": "max_5x",
+  "extra_usage_limit_usd": 60,
+  "extra_usage_alert_pct": 90
+}
+```
+
+When your plan reaches 100% and extra usage is configured, the title switches from percentage to USD format:
+```
+C $12.50/$60
+```
+
+A native macOS notification fires when you reach the alert threshold (default: 90% of your extra budget). Set `extra_usage_limit_usd` to `0` to disable.
 
 ### CLI Report
 
@@ -197,7 +219,9 @@ Settings are stored in `~/.claude-monitor/config.json` (created automatically wi
   "usage_mode": "api",
   "plan": "max_5x",
   "display_style": "bar",
-  "auto_update_enabled": true
+  "auto_update_enabled": true,
+  "extra_usage_limit_usd": 0,
+  "extra_usage_alert_pct": 90
 }
 ```
 
@@ -227,10 +251,11 @@ claude-monitor/
 │   ├── log_parser.py      # ClaudeLogParser: JSONL reading and parsing
 │   ├── api_client.py      # Anthropic API: rate limits and cost report
 │   ├── pricing_fetcher.py # Auto-fetch prices from Anthropic docs
+│   ├── extra_usage.py     # Extra usage calculation for subscription mode
 │   ├── updater.py         # Auto-update via GitHub Releases
 │   ├── cli.py             # Formatted terminal report
 │   └── app.py             # Menu bar app (rumps)
-├── tests/                 # 188 tests
+├── tests/                 # 228 tests
 ├── docs/
 ├── .github/workflows/
 │   └── release.yml        # CI: build .app + create GitHub Release on tag push
