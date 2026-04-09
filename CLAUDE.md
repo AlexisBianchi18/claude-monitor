@@ -56,6 +56,18 @@ tests/
 │   ├── sample_subagent.jsonl
 │   ├── empty.jsonl
 │   └── malformed.jsonl
+docs/
+├── plans/                 — planes de desarrollo (completados)
+│   ├── PLAN.md
+│   └── 2026-04-08-subscription-mode.md
+├── memory/                — notas de sesiones de desarrollo con IA
+│   ├── MEMORY.md
+│   ├── feedback_use_uv.md
+│   ├── project_architecture.md
+│   ├── project_build.md
+│   ├── project_key_patterns.md
+│   ├── project_status.md
+│   └── project_testing.md
 setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```

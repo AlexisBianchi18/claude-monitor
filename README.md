@@ -202,10 +202,13 @@ claude-monitor/
 │       ├── sample_subagent.jsonl
 │       ├── malformed.jsonl
 │       └── empty.jsonl
+├── docs/
+│   ├── plans/             # Development plans (completed)
+│   └── memory/            # AI session development notes
 ├── run_app.py             # Entry point for PyInstaller
 ├── setup.py               # Build script (PyInstaller → .app)
 ├── requirements.txt
-├── CLAUDE.md              # Project specification
+├── CLAUDE.md              # AI assistant specification
 └── README.md
 ```
 
