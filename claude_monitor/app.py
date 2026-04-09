@@ -9,20 +9,55 @@ from datetime import date
 
 import rumps
 
+try:
+    from AppKit import NSFont, NSFontAttributeName
+    from Foundation import NSAttributedString
+
+    _HAS_APPKIT = True
+except ImportError:
+    _HAS_APPKIT = False
+
 from .api_client import get_cost_report, get_last_error, get_rate_limits, invalidate_key
-from .config import ConfigManager
+from .config import PLAN_LIMITS, ConfigManager
 from .log_parser import ClaudeLogParser
 from .models import DailyReport, PlanReport, RateLimitInfo
 from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
 
 logger = logging.getLogger(__name__)
 
+PLAN_DISPLAY_NAMES: dict[str, str] = {
+    "pro": "Pro",
+    "max_5x": "Max 5x",
+    "max_20x": "Max 20x",
+}
 
-def _render_bar(percentage: float, width: int = 10) -> str:
+
+def _noop(_sender: rumps.MenuItem) -> None:
+    """No-op callback para mantener items habilitados (no grayed-out)."""
+
+
+def _apply_mono_style(item: rumps.MenuItem, size: float = 12.0) -> None:
+    """Aplica fuente monoespaciada al item para alineacion correcta."""
+    if not _HAS_APPKIT:
+        return
+    try:
+        font = NSFont.fontWithName_size_("Menlo", size)
+        if font is None:
+            return
+        attrs = {NSFontAttributeName: font}
+        attr_str = NSAttributedString.alloc().initWithString_attributes_(
+            item.title, attrs
+        )
+        item._menuitem.setAttributedTitle_(attr_str)
+    except Exception:
+        pass
+
+
+def _render_bar(percentage: float, width: int = 12) -> str:
     """Renderiza una barra de progreso con caracteres Unicode."""
     clamped = max(0.0, min(percentage, 100.0))
     filled = round(clamped / 100.0 * width)
-    return "\u25b0" * filled + "\u25b1" * (width - filled)
+    return "\u2588" * filled + "\u2591" * (width - filled)
 
 
 def _format_tokens_short(tokens: int) -> str:
@@ -54,14 +89,14 @@ class ClaudeMonitorApp(rumps.App):
         self.config = ConfigManager()
 
         # Items fijos del menu
-        self._today_item = rumps.MenuItem("Today: loading...", callback=None)
+        self._today_item = rumps.MenuItem("Today: loading...", callback=_noop)
         self._separator1 = rumps.separator
         # Project items se generan dinamicamente
         self._separator2 = rumps.separator
-        self._week_item = rumps.MenuItem("This week: ...", callback=None)
+        self._week_item = rumps.MenuItem("This week: ...", callback=_noop)
         self._separator3 = rumps.separator
-        self._pricing_item = rumps.MenuItem("Prices: built-in defaults", callback=None)
-        self._api_status_item = rumps.MenuItem("API: not configured", callback=None)
+        self._pricing_item = rumps.MenuItem("Prices: built-in defaults", callback=_noop)
+        self._api_status_item = rumps.MenuItem("API: not configured", callback=_noop)
         self._update_prices_item = rumps.MenuItem(
             "Update Prices Now", callback=self._on_update_prices
         )
@@ -73,7 +108,7 @@ class ClaudeMonitorApp(rumps.App):
             "Reset Daily Counter", callback=self._on_reset_daily
         )
         self._style_item = rumps.MenuItem(
-            "Style: Bars \u25b0\u25b0\u25b0", callback=self._on_toggle_style
+            "Style: Bars \u2588\u2588\u2588", callback=self._on_toggle_style
         )
         self._prefs_item = rumps.MenuItem(
             "Preferences\u2026", callback=self._on_open_prefs
@@ -152,6 +187,11 @@ class ClaudeMonitorApp(rumps.App):
             self.config.set_api_key(new_key)
             invalidate_key()
             self._refresh()
+
+    def _on_select_plan(self, plan_key: str) -> None:
+        """Cambia el plan de suscripción y refresca."""
+        self.config.set_plan(plan_key)
+        self._refresh()
 
     def _on_toggle_style(self, sender: rumps.MenuItem) -> None:
         """Alterna entre estilo bar y text."""
@@ -287,7 +327,7 @@ class ClaudeMonitorApp(rumps.App):
         equiv_str = f"${plan_report.equivalent_api_cost:.2f}"
         today_item = rumps.MenuItem(
             f"Today: {total_tokens_str} tokens (\u2248 {equiv_str} API)",
-            callback=None,
+            callback=_noop,
         )
         items.append(today_item)
         items.append(rumps.separator)
@@ -297,18 +337,20 @@ class ClaudeMonitorApp(rumps.App):
             short_name = m.model.replace("claude-", "").replace("-20251001", "")
             if style == "bar":
                 bar = _render_bar(m.percentage)
-                line = f"  {short_name:<16} {bar}  {m.percentage:.0f}%"
+                line = f"  {short_name:<14}{bar} {m.percentage:>3.0f}%"
             else:
                 used_str = _format_tokens_short(m.tokens_used)
                 limit_str = _format_tokens_short(m.tokens_limit)
-                line = f"  {short_name:<16} {used_str} / {limit_str}"
-            items.append(rumps.MenuItem(line, callback=None))
+                line = f"  {short_name:<14}{used_str:>5} / {limit_str:<5}"
+            model_item = rumps.MenuItem(line, callback=_noop)
+            _apply_mono_style(model_item)
+            items.append(model_item)
 
         items.append(rumps.separator)
 
         # Reset timer
         items.append(rumps.MenuItem(
-            f"Reset: \u21bb {reset_str}", callback=None
+            f"Reset: \u21bb {reset_str}", callback=_noop
         ))
         items.append(rumps.separator)
 
@@ -316,10 +358,12 @@ class ClaudeMonitorApp(rumps.App):
         max_projects = self.config.max_projects
         for p in report.projects[:max_projects]:
             tok_str = _format_tokens_short(p.total_tokens)
-            items.append(rumps.MenuItem(
+            proj_item = rumps.MenuItem(
                 f"  {p.display_name:<28} {tok_str}",
-                callback=None,
-            ))
+                callback=_noop,
+            )
+            _apply_mono_style(proj_item)
+            items.append(proj_item)
 
         items.append(rumps.separator)
 
@@ -329,15 +373,24 @@ class ClaudeMonitorApp(rumps.App):
         items.append(rumps.MenuItem(
             f"Week: {_format_tokens_short(week_tokens)} tokens "
             f"(\u2248 ${week_cost:.2f} API)",
-            callback=None,
+            callback=_noop,
         ))
         items.append(rumps.separator)
 
-        # Plan info + actions
-        plan_display = self.config.plan.replace("_", " ").title()
-        items.append(rumps.MenuItem(f"Plan: {plan_display}", callback=None))
+        # Plan submenu
+        current_plan = self.config.plan
+        plan_display = PLAN_DISPLAY_NAMES.get(current_plan, current_plan)
+        plan_menu = rumps.MenuItem(f"Plan: {plan_display}")
+        for key in PLAN_LIMITS:
+            label = PLAN_DISPLAY_NAMES.get(key, key)
+            if key == current_plan:
+                label = f"✓ {label}"
+            plan_menu[label] = rumps.MenuItem(
+                label, callback=lambda sender, k=key: self._on_select_plan(k)
+            )
+        items.append(plan_menu)
 
-        style_label = "Bars \u25b0\u25b0\u25b0" if style == "bar" else "Text 0/0"
+        style_label = "Bars \u2588\u2588\u2588" if style == "bar" else "Text 0/0"
         self._style_item.title = f"Style: {style_label}"
         items.append(self._style_item)
         items.append(self._refresh_item)
@@ -401,8 +454,9 @@ class ClaudeMonitorApp(rumps.App):
         if rate_limits_map:
             for _model, info in sorted(rate_limits_map.items()):
                 item = rumps.MenuItem(
-                    self._format_rate_limit(info), callback=None
+                    self._format_rate_limit(info), callback=_noop
                 )
+                _apply_mono_style(item)
                 items.append(item)
             items.append(rumps.separator)
 
@@ -447,8 +501,9 @@ class ClaudeMonitorApp(rumps.App):
         for p in report.projects[:max_projects]:
             item = rumps.MenuItem(
                 f"  {p.display_name:<28} ${p.total_cost:.2f}",
-                callback=None,
+                callback=_noop,
             )
+            _apply_mono_style(item)
             project_items.append(item)
 
         # Weekly summary
