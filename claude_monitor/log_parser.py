@@ -29,12 +29,14 @@ class ClaudeLogParser:
             return DailyReport(date=target_date)
 
         projects: list[ProjectStats] = []
+        all_models: set[str] = set()
         for entry in self.logs_dir.iterdir():
             if not entry.is_dir() or entry.name == "memory":
                 continue
-            stats = self._parse_project(entry, target_date)
+            stats, models = self._parse_project(entry, target_date)
             if stats.entry_count > 0:
                 projects.append(stats)
+                all_models.update(models)
 
         projects.sort(key=lambda p: p.total_cost, reverse=True)
 
@@ -48,6 +50,7 @@ class ClaudeLogParser:
             total_tokens=total_tokens,
             entry_count=entry_count,
             projects=projects,
+            models_used=all_models,
         )
 
     def get_weekly_report(self) -> list[DailyReport]:
@@ -70,7 +73,9 @@ class ClaudeLogParser:
         for f in session_files:
             all_entries.extend(self._parse_jsonl_file(f, target_date))
 
-        return ProjectStats(
+        models_used = {e.model for e in all_entries if e.model}
+
+        stats = ProjectStats(
             name=name,
             display_name=display_name,
             dir_name=project_dir.name,
@@ -78,6 +83,7 @@ class ClaudeLogParser:
             total_tokens=sum(e.usage.total_tokens for e in all_entries),
             entry_count=len(all_entries),
         )
+        return stats, models_used
 
     def _parse_jsonl_file(
         self, path: Path, target_date: date

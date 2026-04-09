@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -55,6 +56,7 @@ class ConfigManager:
         "refresh_interval_seconds": REFRESH_INTERVAL_SECONDS,
         "cost_alert_threshold_usd": COST_ALERT_THRESHOLD_USD,
         "max_projects_in_menu": MAX_PROJECTS_IN_MENU,
+        "anthropic_api_key": "",
     }
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -77,11 +79,13 @@ class ConfigManager:
         self._data = dict(self._defaults)
 
     def save(self) -> None:
-        """Guarda la configuración a disco."""
+        """Guarda la configuración a disco con permisos restrictivos (0600)."""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path.write_text(
             json.dumps(self._data, indent=2) + "\n", encoding="utf-8"
         )
+        # Restringir permisos ya que puede contener API key
+        self.config_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
     # --- Daily offset (para reset de contador) ---
 
@@ -120,3 +124,31 @@ class ConfigManager:
     @property
     def max_projects(self) -> int:
         return int(self._data.get("max_projects_in_menu", MAX_PROJECTS_IN_MENU))
+
+    # --- API key ---
+
+    @property
+    def api_key(self) -> str:
+        """Retorna la API key configurada, o cadena vacía si no hay."""
+        return str(self._data.get("anthropic_api_key", ""))
+
+    @property
+    def has_api_key(self) -> bool:
+        return bool(self.api_key)
+
+    @property
+    def api_key_type(self) -> str:
+        """Retorna 'admin', 'standard', o '' según el prefijo de la key."""
+        key = self.api_key
+        if not key:
+            return ""
+        if key.startswith("sk-ant-admin"):
+            return "admin"
+        if key.startswith("sk-ant-api"):
+            return "standard"
+        return "unknown"
+
+    def set_api_key(self, key: str) -> None:
+        """Guarda la API key y persiste a disco."""
+        self._data["anthropic_api_key"] = key
+        self.save()

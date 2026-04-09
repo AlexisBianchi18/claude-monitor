@@ -163,3 +163,52 @@ class TestPersistence:
         assert mgr2.get_daily_offset(date(2026, 4, 8)) == 5.0
         assert mgr2.has_alert_fired_today(date(2026, 4, 8)) is True
         assert mgr2.refresh_interval == REFRESH_INTERVAL_SECONDS
+
+
+# --- API key ---
+
+
+class TestApiKey:
+    def test_default_empty(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.api_key == ""
+        assert mgr.has_api_key is False
+        assert mgr.api_key_type == ""
+
+    def test_set_and_get_standard_key(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("sk-ant-api03-abc123")
+        assert mgr.api_key == "sk-ant-api03-abc123"
+        assert mgr.has_api_key is True
+        assert mgr.api_key_type == "standard"
+
+    def test_set_and_get_admin_key(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("sk-ant-admin01-xyz789")
+        assert mgr.api_key_type == "admin"
+
+    def test_unknown_key_type(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("some-random-key")
+        assert mgr.api_key_type == "unknown"
+
+    def test_clear_key(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("sk-ant-api03-abc123")
+        mgr.set_api_key("")
+        assert mgr.has_api_key is False
+
+    def test_key_persists_to_disk(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("sk-ant-api03-persist")
+
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.api_key == "sk-ant-api03-persist"
+
+    def test_save_sets_restrictive_permissions(self, config_path):
+        import stat
+
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_api_key("sk-ant-api03-secret")
+        mode = config_path.stat().st_mode & 0o777
+        assert mode == 0o600

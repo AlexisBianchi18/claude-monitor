@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 
 @dataclass
@@ -59,3 +59,46 @@ class DailyReport:
     total_tokens: int = 0
     entry_count: int = 0
     projects: list[ProjectStats] = field(default_factory=list)
+    models_used: set[str] = field(default_factory=set)
+
+
+@dataclass
+class RateLimitInfo:
+    """Info de rate limit obtenida de los headers de respuesta de la API."""
+
+    model: str
+    tokens_limit: int
+    tokens_remaining: int
+    tokens_reset: datetime  # UTC-aware
+    input_tokens_limit: int = 0
+    input_tokens_remaining: int = 0
+    output_tokens_limit: int = 0
+    output_tokens_remaining: int = 0
+    fetched_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+    @property
+    def usage_pct(self) -> float:
+        """Porcentaje de tokens usados (0.0 a 100.0)."""
+        if self.tokens_limit == 0:
+            return 0.0
+        used = self.tokens_limit - self.tokens_remaining
+        return (used / self.tokens_limit) * 100.0
+
+    @property
+    def seconds_until_reset(self) -> int:
+        """Segundos hasta que se reinicia el límite. 0 si ya pasó."""
+        delta = self.tokens_reset - datetime.now(timezone.utc)
+        return max(0, int(delta.total_seconds()))
+
+
+@dataclass
+class ApiCostReport:
+    """Datos de costo obtenidos de la Admin API de Anthropic."""
+
+    date: date
+    total_cost_usd: float
+    fetched_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )

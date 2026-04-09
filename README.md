@@ -18,7 +18,8 @@ A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.a
 - **CLI report** — formatted terminal output for quick checks
 - **Standalone .app** — package as a native macOS app (~22 MB), no Dock icon
 - **Privacy-first** — only reads numeric fields (`usage`, `costUSD`, `timestamp`, `model`). Never reads prompt content.
-- **Fully offline** — no network calls, everything is computed locally
+- **API integration (optional)** — connect your Anthropic API key to see real-time rate limit usage (% tokens used, reset countdown) and actual billing costs from the Admin API
+- **Fully offline by default** — works without any API key, everything computed locally
 
 ## Requirements
 
@@ -103,6 +104,56 @@ The packaged app:
 - Doesn't appear in the Dock (`LSUIElement: true`)
 - Can be copied to `/Applications/`
 
+## API Integration (Optional)
+
+You can optionally connect an Anthropic API key to unlock additional features:
+
+| Key type | Rate limits | Real billing costs |
+|----------|:-----------:|:------------------:|
+| No key (default) | -- | -- |
+| Standard API key | Yes | -- |
+| Admin API key | Yes | Yes |
+
+### Getting your API key
+
+1. Go to the [Anthropic Console](https://console.anthropic.com/).
+2. Sign in (or create an account).
+
+**For a standard API key** (shows rate limit usage):
+
+3. Navigate to **Settings > API Keys**.
+4. Click **Create Key**, give it a name, and copy it. It starts with `sk-ant-api...`.
+
+**For an admin API key** (also shows actual billing costs):
+
+> Admin keys are only available for **organization accounts** (Team or Enterprise plans). Individual accounts cannot create admin keys.
+
+3. Navigate to **Settings > Admin Keys** (only visible to organization admins).
+4. Click **Create Admin Key**, give it a name, and copy it. It starts with `sk-ant-admin...`.
+
+### Configuring the key in Claude Monitor
+
+- Open the menu bar app and click **Configure API Key...**
+- Paste your key and click **Save**
+
+The key is stored in `~/.claude-monitor/config.json` with restricted file permissions (`0600`). You can also set it manually:
+
+```json
+{
+  "anthropic_api_key": "sk-ant-api03-..."
+}
+```
+
+### What each key type enables
+
+**Standard key** — The app makes a lightweight call to the `count_tokens` endpoint (free, no token cost) every 60 seconds to read rate limit headers. The menu shows:
+
+```
+Tokens: 42% used · resets in 38s
+```
+
+**Admin key** — In addition to rate limits, the app queries the [Usage & Cost API](https://docs.anthropic.com/en/docs/administration/administration-api/usage-cost-api) every 5 minutes to show your actual billing cost (instead of the local estimate). The title shows a checkmark when using API-sourced costs: `C $0.42 ✓`.
+
 ## Configuration
 
 Settings are stored in `~/.claude-monitor/config.json` (created automatically with defaults on first run):
@@ -111,7 +162,8 @@ Settings are stored in `~/.claude-monitor/config.json` (created automatically wi
 {
   "refresh_interval_seconds": 30,
   "cost_alert_threshold_usd": 5.0,
-  "max_projects_in_menu": 10
+  "max_projects_in_menu": 10,
+  "anthropic_api_key": ""
 }
 ```
 
@@ -134,15 +186,17 @@ claude-monitor/
 ├── claude_monitor/
 │   ├── __init__.py
 │   ├── __main__.py        # python -m claude_monitor
-│   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport
+│   ├── models.py          # Dataclasses: TokenUsage, CostEntry, ProjectStats, DailyReport, RateLimitInfo, ApiCostReport
 │   ├── config.py          # Model pricing, constants, ConfigManager
 │   ├── log_parser.py      # ClaudeLogParser: JSONL reading and parsing
+│   ├── api_client.py      # Anthropic API: rate limits and cost report
 │   ├── cli.py             # Formatted terminal report
-│   └── app.py             # Menu bar app (rumps) with alerts and reset
+│   └── app.py             # Menu bar app (rumps) with alerts, reset, and API integration
 ├── tests/
 │   ├── test_models.py
 │   ├── test_parser.py
 │   ├── test_config.py
+│   ├── test_api_client.py
 │   └── fixtures/
 │       ├── sample_session.jsonl
 │       ├── sample_subagent.jsonl
@@ -158,7 +212,7 @@ claude-monitor/
 ## Tests
 
 ```bash
-# Run all tests (50 tests)
+# Run all tests (111 tests)
 .venv/bin/python -m pytest tests/ -v
 ```
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from claude_monitor.api_client import reset_api_cache
 from claude_monitor.pricing_fetcher import reset_cache
 
 
@@ -22,3 +23,11 @@ def _isolate_pricing_cache(tmp_path, monkeypatch):
     reset_cache()
     yield
     reset_cache()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_api_cache():
+    """Limpia el cache del api_client entre tests."""
+    reset_api_cache()
+    yield
+    reset_api_cache()

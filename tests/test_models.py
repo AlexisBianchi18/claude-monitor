@@ -3,9 +3,11 @@
 from datetime import date, datetime, timezone
 
 from claude_monitor.models import (
+    ApiCostReport,
     CostEntry,
     DailyReport,
     ProjectStats,
+    RateLimitInfo,
     TokenUsage,
 )
 
@@ -65,3 +67,71 @@ class TestDailyReport:
         assert r.total_tokens == 0
         assert r.entry_count == 0
         assert r.projects == []
+        assert r.models_used == set()
+
+    def test_models_used(self):
+        r = DailyReport(
+            date=date(2026, 4, 8),
+            models_used={"claude-opus-4-6", "claude-sonnet-4-6"},
+        )
+        assert r.models_used == {"claude-opus-4-6", "claude-sonnet-4-6"}
+
+
+class TestRateLimitInfo:
+    def _make(self, limit=1000, remaining=600, reset_offset_secs=45, model="claude-sonnet-4-6"):
+        from datetime import timedelta
+
+        reset = datetime.now(timezone.utc) + timedelta(seconds=reset_offset_secs)
+        return RateLimitInfo(
+            model=model,
+            tokens_limit=limit,
+            tokens_remaining=remaining,
+            tokens_reset=reset,
+        )
+
+    def test_usage_pct_zero(self):
+        info = self._make(limit=1000, remaining=1000)
+        assert info.usage_pct == 0.0
+
+    def test_usage_pct_half(self):
+        info = self._make(limit=1000, remaining=500)
+        assert info.usage_pct == 50.0
+
+    def test_usage_pct_full(self):
+        info = self._make(limit=1000, remaining=0)
+        assert info.usage_pct == 100.0
+
+    def test_usage_pct_zero_limit(self):
+        info = self._make(limit=0, remaining=0)
+        assert info.usage_pct == 0.0
+
+    def test_seconds_until_reset_future(self):
+        info = self._make(reset_offset_secs=60)
+        secs = info.seconds_until_reset
+        assert 58 <= secs <= 60
+
+    def test_seconds_until_reset_past(self):
+        info = self._make(reset_offset_secs=-10)
+        assert info.seconds_until_reset == 0
+
+    def test_seconds_until_reset_now(self):
+        info = self._make(reset_offset_secs=0)
+        assert info.seconds_until_reset == 0
+
+    def test_default_fetched_at(self):
+        info = self._make()
+        assert info.fetched_at is not None
+        age = (datetime.now(timezone.utc) - info.fetched_at).total_seconds()
+        assert age < 2
+
+
+class TestApiCostReport:
+    def test_creation(self):
+        r = ApiCostReport(date=date(2026, 4, 8), total_cost_usd=1.23)
+        assert r.date == date(2026, 4, 8)
+        assert r.total_cost_usd == 1.23
+
+    def test_default_fetched_at(self):
+        r = ApiCostReport(date=date(2026, 4, 8), total_cost_usd=0.0)
+        age = (datetime.now(timezone.utc) - r.fetched_at).total_seconds()
+        assert age < 2
