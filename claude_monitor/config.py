@@ -89,6 +89,7 @@ class ConfigManager:
         "last_update_check": "",
         "extra_usage_limit_usd": 0.0,
         "extra_usage_alert_pct": 90.0,
+        "selected_model": None,
     }
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -261,6 +262,21 @@ class ConfigManager:
     def mark_extra_alert_fired(self, target_date: date) -> None:
         """Marca que la alerta de extra usage se disparo hoy y persiste."""
         self._data["last_extra_alert_date"] = target_date.isoformat()
+        self.save()
+
+    # --- Model filter ---
+
+    @property
+    def selected_model(self) -> str | None:
+        """Modelo seleccionado para filtrar la barra de titulo. None = todos."""
+        val = self._data.get("selected_model")
+        if val is None or val == "":
+            return None
+        return str(val)
+
+    def set_selected_model(self, model: str | None) -> None:
+        """Guarda el modelo seleccionado y persiste."""
+        self._data["selected_model"] = model
         self.save()
 
     # --- Auto-update ---

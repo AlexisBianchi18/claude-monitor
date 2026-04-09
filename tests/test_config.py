@@ -408,3 +408,36 @@ class TestExtraUsageConfig:
         mgr = ConfigManager(config_path=config_path)
         assert mgr.extra_usage_limit_usd == 100.0
         assert mgr.extra_usage_alert_pct == 85.0
+
+
+class TestSelectedModel:
+    def test_default_none(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.selected_model is None
+
+    def test_set_and_get(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_selected_model("claude-opus-4-6")
+        assert mgr.selected_model == "claude-opus-4-6"
+
+    def test_set_none_clears(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_selected_model("claude-opus-4-6")
+        mgr.set_selected_model(None)
+        assert mgr.selected_model is None
+
+    def test_persists_to_disk(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_selected_model("claude-sonnet-4-6")
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.selected_model == "claude-sonnet-4-6"
+
+    def test_empty_string_treated_as_none(self, config_path):
+        config_path.write_text(json.dumps({"selected_model": ""}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.selected_model is None
+
+    def test_load_from_file(self, config_path):
+        config_path.write_text(json.dumps({"selected_model": "claude-opus-4-6"}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.selected_model == "claude-opus-4-6"
