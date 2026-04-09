@@ -12,10 +12,37 @@ import rumps
 from .api_client import get_cost_report, get_last_error, get_rate_limits, invalidate_key
 from .config import ConfigManager
 from .log_parser import ClaudeLogParser
-from .models import DailyReport, RateLimitInfo
+from .models import DailyReport, PlanReport, RateLimitInfo
 from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
 
 logger = logging.getLogger(__name__)
+
+
+def _render_bar(percentage: float, width: int = 10) -> str:
+    """Renderiza una barra de progreso con caracteres Unicode."""
+    clamped = max(0.0, min(percentage, 100.0))
+    filled = round(clamped / 100.0 * width)
+    return "\u25b0" * filled + "\u25b1" * (width - filled)
+
+
+def _format_tokens_short(tokens: int) -> str:
+    """Formatea tokens en formato corto: 2.1M, 500K, 42."""
+    if tokens >= 1_000_000:
+        return f"{tokens / 1_000_000:.1f}M"
+    if tokens >= 1_000:
+        return f"{tokens / 1_000:.0f}K"
+    return str(tokens)
+
+
+def _format_reset_time(seconds: int) -> str:
+    """Formatea segundos restantes en formato legible."""
+    if seconds <= 0:
+        return "now"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
 
 
 class ClaudeMonitorApp(rumps.App):
@@ -44,6 +71,9 @@ class ClaudeMonitorApp(rumps.App):
         )
         self._reset_item = rumps.MenuItem(
             "Reset Daily Counter", callback=self._on_reset_daily
+        )
+        self._style_item = rumps.MenuItem(
+            "Style: Bars \u25b0\u25b0\u25b0", callback=self._on_toggle_style
         )
         self._prefs_item = rumps.MenuItem(
             "Preferences\u2026", callback=self._on_open_prefs
@@ -123,6 +153,11 @@ class ClaudeMonitorApp(rumps.App):
             invalidate_key()
             self._refresh()
 
+    def _on_toggle_style(self, sender: rumps.MenuItem) -> None:
+        """Alterna entre estilo bar y text."""
+        self.config.toggle_display_style()
+        self._refresh()
+
     @staticmethod
     def _mask_key(key: str) -> str:
         if not key or len(key) < 14:
@@ -174,39 +209,144 @@ class ClaudeMonitorApp(rumps.App):
             report = self.parser.get_daily_report(today)
             weekly = self.parser.get_weekly_report()
 
-            # Aplicar offset de reset diario
-            offset = self.config.get_daily_offset(today)
-            display_cost = max(0.0, report.total_cost - offset)
-
-            # Guardar modelos usados hoy para polling en background
             self._last_models_used = sorted(report.models_used)
 
-            # Integración API
-            rate_limits_map: dict[str, RateLimitInfo] = {}
-            api_cost = None
-            if self.config.has_api_key:
-                rate_limits_map = get_rate_limits(
-                    self.config.api_key, self._last_models_used
-                )
-                if self.config.api_key_type == "admin":
-                    cost_report = get_cost_report(self.config.api_key, today)
-                    if cost_report is not None:
-                        api_cost = cost_report.total_cost_usd
-                        display_cost = max(0.0, api_cost - offset)
-
-            self._update_title(display_cost, today, api_source=api_cost is not None)
-            self._update_menu(
-                report, weekly, display_cost, rate_limits_map, api_cost is not None
-            )
-
-            # Actualizar estado de precios y API
-            age = get_pricing_age()
-            self._pricing_item.title = (
-                f"Prices: {age}" if age else "Prices: built-in defaults"
-            )
-            self._update_api_status()
+            if self.config.usage_mode == "subscription":
+                self._refresh_subscription(today, report, weekly)
+            else:
+                self._refresh_api(today, report, weekly)
         except Exception:
             self.title = "C err"
+
+    def _refresh_api(
+        self, today: date, report: DailyReport, weekly: list[DailyReport]
+    ) -> None:
+        """Refresh en modo API (comportamiento original)."""
+        offset = self.config.get_daily_offset(today)
+        display_cost = max(0.0, report.total_cost - offset)
+
+        rate_limits_map: dict[str, RateLimitInfo] = {}
+        api_cost = None
+        if self.config.has_api_key:
+            rate_limits_map = get_rate_limits(
+                self.config.api_key, self._last_models_used
+            )
+            if self.config.api_key_type == "admin":
+                cost_report = get_cost_report(self.config.api_key, today)
+                if cost_report is not None:
+                    api_cost = cost_report.total_cost_usd
+                    display_cost = max(0.0, api_cost - offset)
+
+        self._update_title(display_cost, today, api_source=api_cost is not None)
+        self._update_menu(
+            report, weekly, display_cost, rate_limits_map, api_cost is not None
+        )
+
+        age = get_pricing_age()
+        self._pricing_item.title = (
+            f"Prices: {age}" if age else "Prices: built-in defaults"
+        )
+        self._update_api_status()
+
+    def _refresh_subscription(
+        self, today: date, report: DailyReport, weekly: list[DailyReport]
+    ) -> None:
+        """Refresh en modo suscripcion."""
+        plan_report = self.parser.get_plan_report(
+            plan_name=self.config.plan,
+            daily_limits=self.config.daily_token_limits,
+            reset_hour_utc=self.config.reset_hour_utc,
+            target_date=today,
+        )
+
+        pct = plan_report.overall_percentage
+        if pct >= 95:
+            self.title = f"\U0001f534 {pct:.0f}%"
+        elif pct >= 80:
+            self.title = f"\u26a0 {pct:.0f}%"
+        else:
+            self.title = f"C {pct:.0f}%"
+
+        self._update_subscription_menu(plan_report, report, weekly)
+
+    def _update_subscription_menu(
+        self,
+        plan_report: PlanReport,
+        report: DailyReport,
+        weekly: list[DailyReport],
+    ) -> None:
+        """Construye el menu para modo suscripcion."""
+        style = self.config.display_style
+        reset_str = _format_reset_time(plan_report.seconds_until_reset)
+
+        items: list = []
+
+        # Today summary
+        total_tokens_str = _format_tokens_short(report.total_tokens)
+        equiv_str = f"${plan_report.equivalent_api_cost:.2f}"
+        today_item = rumps.MenuItem(
+            f"Today: {total_tokens_str} tokens (\u2248 {equiv_str} API)",
+            callback=None,
+        )
+        items.append(today_item)
+        items.append(rumps.separator)
+
+        # Per-model usage
+        for m in plan_report.models:
+            short_name = m.model.replace("claude-", "").replace("-20251001", "")
+            if style == "bar":
+                bar = _render_bar(m.percentage)
+                line = f"  {short_name:<16} {bar}  {m.percentage:.0f}%"
+            else:
+                used_str = _format_tokens_short(m.tokens_used)
+                limit_str = _format_tokens_short(m.tokens_limit)
+                line = f"  {short_name:<16} {used_str} / {limit_str}"
+            items.append(rumps.MenuItem(line, callback=None))
+
+        items.append(rumps.separator)
+
+        # Reset timer
+        items.append(rumps.MenuItem(
+            f"Reset: \u21bb {reset_str}", callback=None
+        ))
+        items.append(rumps.separator)
+
+        # Projects
+        max_projects = self.config.max_projects
+        for p in report.projects[:max_projects]:
+            tok_str = _format_tokens_short(p.total_tokens)
+            items.append(rumps.MenuItem(
+                f"  {p.display_name:<28} {tok_str}",
+                callback=None,
+            ))
+
+        items.append(rumps.separator)
+
+        # Weekly summary
+        week_tokens = sum(r.total_tokens for r in weekly)
+        week_cost = sum(r.total_cost for r in weekly)
+        items.append(rumps.MenuItem(
+            f"Week: {_format_tokens_short(week_tokens)} tokens "
+            f"(\u2248 ${week_cost:.2f} API)",
+            callback=None,
+        ))
+        items.append(rumps.separator)
+
+        # Plan info + actions
+        plan_display = self.config.plan.replace("_", " ").title()
+        items.append(rumps.MenuItem(f"Plan: {plan_display}", callback=None))
+
+        style_label = "Bars \u25b0\u25b0\u25b0" if style == "bar" else "Text 0/0"
+        self._style_item.title = f"Style: {style_label}"
+        items.append(self._style_item)
+        items.append(self._refresh_item)
+        items.append(self._reset_item)
+        items.append(self._prefs_item)
+        items.append(rumps.separator)
+        items.append(self._quit_item)
+
+        self.menu.clear()
+        self.menu = items
 
     def _update_title(
         self, display_cost: float, today: date, *, api_source: bool = False
@@ -280,6 +420,7 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._refresh_item)
         items.append(self._configure_api_item)
         items.append(self._reset_item)
+        items.append(self._style_item)   # <-- add this line
         items.append(self._prefs_item)
         items.append(self._separator4)
         items.append(self._quit_item)
