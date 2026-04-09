@@ -35,10 +35,7 @@ cd claude-monitor
 
 # Create virtual environment and install dependencies
 uv venv
-uv pip install rumps
-
-# (Optional) Install dev dependencies
-uv pip install pytest
+uv pip install -r requirements.txt
 ```
 
 ## Usage
