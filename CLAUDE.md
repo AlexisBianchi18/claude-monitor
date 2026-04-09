@@ -59,6 +59,8 @@ tests/
 │   ├── empty.jsonl
 │   └── malformed.jsonl
 docs/
+├── features/              — sistema de gestion de features (un .md por feature)
+│   └── _template.md       — plantilla para nuevas features
 ├── private/               — submodulo git privado (solo owner, no visible publicamente)
 │   ├── plans/             — planes de desarrollo
 │   └── memory/            — notas de sesiones de desarrollo con IA
@@ -211,3 +213,42 @@ uv run python setup.py   # genera bundle .app con LSUIElement=True (no aparece e
   tokens y PRICING_TABLE. El pricing_fetcher puede actualizar precios desde la web.
 - **Nombre de proyecto**: se extrae del campo `cwd` de la primera linea tipo
   `user` (ultimo segmento del path). Fallback: nombre del directorio encoded.
+
+---
+
+## Sistema de gestion de features
+
+Las features futuras se gestionan como archivos Markdown en `docs/features/`.
+
+### Estructura
+
+- Un archivo `.md` por feature: `docs/features/{NNN}-{slug}.md`
+- Plantilla base: `docs/features/_template.md`
+- Frontmatter YAML con: id, title, status, priority, complexity, created, updated, tags, plan
+
+### Estados
+
+```
+idea → draft → analysis → ready → planned → in-progress → done
+                                                  ↓
+                                              discarded
+```
+
+| Estado | Significado |
+|--------|------------|
+| `idea` | Concepto minimo |
+| `draft` | Descripcion completa, sin analisis tecnico |
+| `analysis` | Siendo analizada — notas, trade-offs |
+| `ready` | Analisis completo, lista para planificar |
+| `planned` | Tiene plan de desarrollo en `.claude/plans/` |
+| `in-progress` | Siendo implementada |
+| `done` | Implementada y mergeada |
+| `discarded` | Descartada con razon documentada |
+
+### Operaciones
+
+- **Crear**: copiar `_template.md`, asignar siguiente numero secuencial
+- **Listar**: leer directorio, mostrar tabla (id, titulo, status, prioridad)
+- **Analizar**: leer feature, investigar viabilidad, agregar notas en seccion Analisis
+- **Planificar**: cambiar status a `planned`, generar plan en `.claude/plans/`, linkear en frontmatter `plan:`
+- **Implementar**: cambiar status a `in-progress`, seguir el plan
