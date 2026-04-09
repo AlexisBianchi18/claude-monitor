@@ -560,6 +560,28 @@ class TestEffectiveTokens:
         assert opus.percentage == pytest.approx(350 / 10_000_000 * 100)
 
 
+class TestCostByModel:
+    def test_cost_by_model_populated(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        assert isinstance(report.cost_by_model, dict)
+        assert len(report.cost_by_model) > 0
+        assert "claude-opus-4-6" in report.cost_by_model
+        assert "claude-sonnet-4-6" in report.cost_by_model
+        assert "claude-haiku-4-5-20251001" in report.cost_by_model
+
+    def test_cost_by_model_sums_to_total(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        model_total = sum(report.cost_by_model.values())
+        assert abs(model_total - report.total_cost) < 1e-10
+
+    def test_cost_by_model_empty_when_no_data(self):
+        parser = ClaudeLogParser(logs_dir=Path("/nonexistent/path"))
+        report = parser.get_daily_report(TARGET_DATE)
+        assert report.cost_by_model == {}
+
+
 # --- Weekly report ---
 
 

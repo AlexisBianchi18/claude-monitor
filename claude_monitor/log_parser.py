@@ -32,10 +32,11 @@ class ClaudeLogParser:
         all_models: set[str] = set()
         all_tokens_by_model: dict[str, int] = {}
         all_effective_tokens_by_model: dict[str, int] = {}
+        all_cost_by_model: dict[str, float] = {}
         for entry in self.logs_dir.iterdir():
             if not entry.is_dir() or entry.name == "memory":
                 continue
-            stats, models, model_tokens, eff_model_tokens = self._parse_project(
+            stats, models, model_tokens, eff_model_tokens, cost_model = self._parse_project(
                 entry, target_date
             )
             if stats.entry_count > 0:
@@ -48,6 +49,10 @@ class ClaudeLogParser:
                 for model, tokens in eff_model_tokens.items():
                     all_effective_tokens_by_model[model] = (
                         all_effective_tokens_by_model.get(model, 0) + tokens
+                    )
+                for model, cost in cost_model.items():
+                    all_cost_by_model[model] = (
+                        all_cost_by_model.get(model, 0.0) + cost
                     )
 
         projects.sort(key=lambda p: p.total_cost, reverse=True)
@@ -65,6 +70,7 @@ class ClaudeLogParser:
             models_used=all_models,
             tokens_by_model=all_tokens_by_model,
             effective_tokens_by_model=all_effective_tokens_by_model,
+            cost_by_model=all_cost_by_model,
         )
 
     def get_weekly_report(self) -> list[DailyReport]:
@@ -117,11 +123,11 @@ class ClaudeLogParser:
 
     def _parse_project(
         self, project_dir: Path, target_date: date
-    ) -> tuple[ProjectStats, set[str], dict[str, int], dict[str, int]]:
+    ) -> tuple[ProjectStats, set[str], dict[str, int], dict[str, int], dict[str, float]]:
         """Parsea todos los archivos de sesion de un proyecto.
 
         Returns:
-            (stats, models_used, model_tokens, effective_model_tokens)
+            (stats, models_used, model_tokens, effective_model_tokens, cost_by_model)
         """
         session_files = self._find_session_files(project_dir)
         name, display_name = self._extract_project_name(project_dir, session_files)
@@ -140,6 +146,10 @@ class ClaudeLogParser:
                 effective_model_tokens.get(e.model, 0) + e.usage.effective_tokens
             )
 
+        cost_by_model: dict[str, float] = {}
+        for e in all_entries:
+            cost_by_model[e.model] = cost_by_model.get(e.model, 0.0) + e.cost_usd
+
         stats = ProjectStats(
             name=name,
             display_name=display_name,
@@ -148,7 +158,7 @@ class ClaudeLogParser:
             total_tokens=sum(e.usage.total_tokens for e in all_entries),
             entry_count=len(all_entries),
         )
-        return stats, models_used, model_tokens, effective_model_tokens
+        return stats, models_used, model_tokens, effective_model_tokens, cost_by_model
 
     def _parse_jsonl_file(
         self, path: Path, target_date: date
