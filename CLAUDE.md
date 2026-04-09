@@ -40,16 +40,16 @@ claude_monitor/
 ├── config.py              — PRICING_TABLE, PLAN_LIMITS, ConfigManager (persiste en ~/.claude-monitor/config.json)
 ├── log_parser.py          — ClaudeLogParser: parsea ~/.claude/projects/**/*.jsonl, deduplica, calcula costos
 ├── extra_usage.py         — Calculo de extra usage para modo subscription
-├── app.py                 — ClaudeMonitorApp(rumps.App): menu bar, timer 30s, alertas, modos api/subscription, UI styled con NSAttributedString
+├── app.py                 — ClaudeMonitorApp(rumps.App): menu bar, timer 30s, alertas, modos api/subscription, UI styled con NSAttributedString, filtro por modelo
 ├── cli.py                 — CLI formatter: tabla terminal, resumen 7 dias
 ├── api_client.py          — Cliente HTTP para API Anthropic (rate limits, cost report con admin key)
 ├── pricing_fetcher.py     — Scraper HTML de precios desde docs Anthropic, cache 24h
 ├── updater.py             — Auto-update via GitHub Releases: check, download, replace .app, restart
 tests/
 ├── conftest.py            — fixtures pytest
-├── test_models.py         — 24 tests
-├── test_config.py         — 53 tests
-├── test_parser.py         — 38 tests
+├── test_models.py         — 26 tests
+├── test_config.py         — 65 tests
+├── test_parser.py         — 41 tests
 ├── test_plan_report.py    — 6 tests
 ├── test_extra_usage.py    — 23 tests
 ├── test_api_client.py     — 27 tests
@@ -73,7 +73,7 @@ setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
 
-Total: **228 tests**.
+Total: **239 tests**.
 
 ---
 
