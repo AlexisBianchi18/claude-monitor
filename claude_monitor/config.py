@@ -201,15 +201,17 @@ class ConfigManager:
 
     @property
     def reset_hour_utc(self) -> int:
-        return int(self._data.get("reset_hour_utc", DEFAULT_RESET_HOUR_UTC))
+        val = int(self._data.get("reset_hour_utc", DEFAULT_RESET_HOUR_UTC))
+        return max(0, min(23, val))
 
     @property
     def daily_token_limits(self) -> dict[str, int]:
-        """Limites diarios por modelo. Custom overrides > plan defaults."""
+        """Limites diarios por modelo. Custom overrides se mezclan con plan defaults."""
+        base = dict(PLAN_LIMITS.get(self.plan, {}))
         custom = self._data.get("daily_token_limits")
         if isinstance(custom, dict) and custom:
-            return {k: int(v) for k, v in custom.items()}
-        return dict(PLAN_LIMITS.get(self.plan, {}))
+            base.update({k: int(v) for k, v in custom.items()})
+        return base
 
     def set_plan(self, plan: str) -> None:
         """Cambia el plan y persiste. Limpia custom limits."""

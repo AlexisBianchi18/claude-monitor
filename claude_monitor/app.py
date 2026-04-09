@@ -420,7 +420,6 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._refresh_item)
         items.append(self._configure_api_item)
         items.append(self._reset_item)
-        items.append(self._style_item)   # <-- add this line
         items.append(self._prefs_item)
         items.append(self._separator4)
         items.append(self._quit_item)
