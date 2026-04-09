@@ -1,7 +1,7 @@
 """Tests para ConfigManager — configuración persistente."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -260,10 +260,6 @@ class TestPlanConfig:
         mgr = ConfigManager(config_path=config_path)
         assert mgr.daily_token_limits["claude-opus-4-6"] == 999
 
-    def test_reset_hour_utc_default(self, config_path):
-        mgr = ConfigManager(config_path=config_path)
-        assert mgr.reset_hour_utc == 7
-
     def test_set_plan(self, config_path):
         mgr = ConfigManager(config_path=config_path)
         mgr.set_plan("max_20x")
@@ -441,3 +437,72 @@ class TestSelectedModel:
         config_path.write_text(json.dumps({"selected_model": "claude-opus-4-6"}))
         mgr = ConfigManager(config_path=config_path)
         assert mgr.selected_model == "claude-opus-4-6"
+
+
+class TestResetWindowConfig:
+    def test_reset_window_hours_default(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_window_hours == 5
+
+    def test_reset_window_hours_custom(self, config_path):
+        config_path.write_text(json.dumps({"reset_window_hours": 3}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_window_hours == 3
+
+    def test_reset_window_hours_clamped_low(self, config_path):
+        config_path.write_text(json.dumps({"reset_window_hours": 0}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_window_hours == 1
+
+    def test_reset_window_hours_clamped_high(self, config_path):
+        config_path.write_text(json.dumps({"reset_window_hours": 30}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_window_hours == 24
+
+    def test_reset_anchor_utc_default_none(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_anchor_utc is None
+
+    def test_reset_anchor_utc_from_config(self, config_path):
+        config_path.write_text(json.dumps({
+            "reset_anchor_utc": "2026-04-09T15:00:00+00:00"
+        }))
+        mgr = ConfigManager(config_path=config_path)
+        anchor = mgr.reset_anchor_utc
+        assert anchor is not None
+        assert anchor.year == 2026
+        assert anchor.hour == 15
+
+    def test_reset_anchor_utc_invalid_returns_none(self, config_path):
+        config_path.write_text(json.dumps({"reset_anchor_utc": "not-a-date"}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_anchor_utc is None
+
+    def test_set_reset_anchor(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        anchor = datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+        mgr.set_reset_anchor(anchor)
+        assert mgr.reset_anchor_utc == anchor
+        # Persiste
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.reset_anchor_utc == anchor
+
+    def test_migration_from_reset_hour_utc(self, config_path):
+        """Si existe reset_hour_utc pero no reset_anchor_utc, migra automáticamente."""
+        config_path.write_text(json.dumps({"reset_hour_utc": 12}))
+        mgr = ConfigManager(config_path=config_path)
+        anchor = mgr.reset_anchor_utc
+        assert anchor is not None
+        assert anchor.hour == 12
+        assert anchor.minute == 0
+
+    def test_set_reset_anchor_removes_old_reset_hour(self, config_path):
+        config_path.write_text(json.dumps({"reset_hour_utc": 7}))
+        mgr = ConfigManager(config_path=config_path)
+        anchor = datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+        mgr.set_reset_anchor(anchor)
+        # Ya no debería tener reset_hour_utc en raw data
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.reset_anchor_utc == anchor
+        raw = json.loads(config_path.read_text())
+        assert "reset_hour_utc" not in raw

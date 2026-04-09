@@ -3,7 +3,7 @@
 import json
 import os
 import shutil
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -595,3 +595,147 @@ class TestWeeklyReport:
         # Deben estar ordenados de más antiguo a más reciente
         for i in range(len(weekly) - 1):
             assert weekly[i].date < weekly[i + 1].date
+
+
+class TestWindowBoundaries:
+    """Tests para el cálculo de ventana de 5h."""
+
+    def test_basic_window(self):
+        anchor = datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 9, 12, 30, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 5, _now=now)
+        assert start == datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+
+    def test_window_crosses_day_boundary(self):
+        anchor = datetime(2026, 4, 9, 22, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 10, 1, 0, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 5, _now=now)
+        assert start == datetime(2026, 4, 9, 22, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 10, 3, 0, tzinfo=timezone.utc)
+
+    def test_window_several_cycles_later(self):
+        anchor = datetime(2026, 4, 1, 7, 0, tzinfo=timezone.utc)
+        # 8 días y 3.5h = 195.5h → 39 ciclos completos, dentro de ventana 39
+        now = datetime(2026, 4, 9, 10, 30, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 5, _now=now)
+        # Ventana 39: anchor + 39*5h = anchor + 195h = 2026-04-09T10:00
+        assert start == datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+
+    def test_exactly_at_boundary(self):
+        anchor = datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 5, _now=now)
+        # En la frontera exacta, comienza la nueva ventana
+        assert start == datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 20, 0, tzinfo=timezone.utc)
+
+    def test_custom_window_hours(self):
+        anchor = datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 9, 13, 30, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 3, _now=now)
+        assert start == datetime(2026, 4, 9, 13, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 16, 0, tzinfo=timezone.utc)
+
+    def test_anchor_in_future_wraps_back(self):
+        """Si el anchor es futuro, calcula hacia atrás."""
+        anchor = datetime(2026, 4, 10, 10, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+        start, end = ClaudeLogParser._compute_window_boundaries(anchor, 5, _now=now)
+        # -22h / 5h = -4.4 → floor = -5 → anchor - 25h = 04-09 09:00
+        assert start == datetime(2026, 4, 9, 9, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 14, 0, tzinfo=timezone.utc)
+
+
+class TestEstimateNextReset:
+    def test_returns_end_of_current_window(self):
+        anchor = datetime(2026, 4, 9, 10, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 9, 12, 30, tzinfo=timezone.utc)
+        reset = ClaudeLogParser._estimate_next_reset(anchor, 5, _now=now)
+        assert reset == datetime(2026, 4, 9, 15, 0, tzinfo=timezone.utc)
+
+    def test_no_anchor_returns_none(self):
+        reset = ClaudeLogParser._estimate_next_reset(None, 5)
+        assert reset is None
+
+
+class TestGetWindowReport:
+    """get_window_report solo cuenta tokens dentro de la ventana."""
+
+    @staticmethod
+    def _entry(msg_id, ts, inp=1000, out=500):
+        return json.dumps({
+            "type": "assistant",
+            "timestamp": ts,
+            "message": {
+                "id": msg_id, "model": "claude-sonnet-4-6",
+                "usage": {
+                    "input_tokens": inp, "output_tokens": out,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+            },
+        })
+
+    def test_only_includes_entries_in_window(self, tmp_path):
+        project = tmp_path / "-Users-test-proj"
+        project.mkdir()
+        session = project / "sess.jsonl"
+        lines = [
+            self._entry("m1", "2026-04-09T08:00:00.000Z"),  # dentro 07-12
+            self._entry("m2", "2026-04-09T11:00:00.000Z"),  # dentro
+            self._entry("m3", "2026-04-09T06:00:00.000Z"),  # fuera (antes)
+            self._entry("m4", "2026-04-09T13:00:00.000Z"),  # fuera (después)
+        ]
+        session.write_text("\n".join(lines) + "\n")
+
+        parser = ClaudeLogParser(logs_dir=tmp_path)
+        window_start = datetime(2026, 4, 9, 7, 0, tzinfo=timezone.utc)
+        window_end = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+        report = parser.get_window_report(window_start, window_end)
+
+        assert report.entry_count == 2
+        total_eff = sum(report.effective_tokens_by_model.values())
+        assert total_eff == 2 * (1000 + 500)
+
+    def test_empty_window_returns_zero(self, tmp_path):
+        parser = ClaudeLogParser(logs_dir=tmp_path)
+        window_start = datetime(2026, 4, 9, 7, 0, tzinfo=timezone.utc)
+        window_end = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+        report = parser.get_window_report(window_start, window_end)
+        assert report.entry_count == 0
+        assert report.total_cost == 0.0
+
+    def test_window_end_is_exclusive(self, tmp_path):
+        project = tmp_path / "-Users-test-proj"
+        project.mkdir()
+        session = project / "sess.jsonl"
+        lines = [
+            self._entry("m1", "2026-04-09T12:00:00.000Z"),  # exactamente en window_end
+        ]
+        session.write_text("\n".join(lines) + "\n")
+
+        parser = ClaudeLogParser(logs_dir=tmp_path)
+        window_start = datetime(2026, 4, 9, 7, 0, tzinfo=timezone.utc)
+        window_end = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+        report = parser.get_window_report(window_start, window_end)
+        assert report.entry_count == 0  # excluido
+
+    def test_deduplication_within_window(self, tmp_path):
+        project = tmp_path / "-Users-test-proj"
+        project.mkdir()
+        session = project / "sess.jsonl"
+        lines = [
+            self._entry("m1", "2026-04-09T08:00:00.000Z", inp=100, out=50),
+            self._entry("m1", "2026-04-09T08:01:00.000Z", inp=200, out=100),  # same id
+        ]
+        session.write_text("\n".join(lines) + "\n")
+
+        parser = ClaudeLogParser(logs_dir=tmp_path)
+        window_start = datetime(2026, 4, 9, 7, 0, tzinfo=timezone.utc)
+        window_end = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+        report = parser.get_window_report(window_start, window_end)
+        assert report.entry_count == 1
+        total_eff = sum(report.effective_tokens_by_model.values())
+        assert total_eff == 300  # last wins: 200+100

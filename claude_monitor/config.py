@@ -51,7 +51,7 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 # --- Plan de suscripcion ---
 VALID_USAGE_MODES = {"api", "subscription"}
 VALID_DISPLAY_STYLES = {"bar", "text"}
-DEFAULT_RESET_HOUR_UTC = 7  # ~midnight Chile
+DEFAULT_RESET_WINDOW_HOURS = 5
 
 # Limites diarios estimados de tokens por plan (ajustables por el usuario)
 PLAN_LIMITS: dict[str, dict[str, int]] = {
@@ -84,7 +84,8 @@ class ConfigManager:
         "usage_mode": "api",
         "plan": "max_5x",
         "display_style": "bar",
-        "reset_hour_utc": DEFAULT_RESET_HOUR_UTC,
+        "reset_window_hours": DEFAULT_RESET_WINDOW_HOURS,
+        "reset_anchor_utc": None,
         "auto_update_enabled": True,
         "last_update_check": "",
         "extra_usage_limit_usd": 0.0,
@@ -205,9 +206,36 @@ class ConfigManager:
         return val if val in VALID_DISPLAY_STYLES else "bar"
 
     @property
-    def reset_hour_utc(self) -> int:
-        val = int(self._data.get("reset_hour_utc", DEFAULT_RESET_HOUR_UTC))
-        return max(0, min(23, val))
+    def reset_window_hours(self) -> int:
+        val = int(self._data.get("reset_window_hours", DEFAULT_RESET_WINDOW_HOURS))
+        return max(1, min(24, val))
+
+    @property
+    def reset_anchor_utc(self) -> datetime | None:
+        """Retorna el anchor de reset, o None si no está configurado."""
+        raw = self._data.get("reset_anchor_utc")
+        if raw is None:
+            # Migración: si existe reset_hour_utc viejo, convertir
+            old_hour = self._data.get("reset_hour_utc")
+            if old_hour is not None:
+                today = date.today()
+                return datetime(
+                    today.year, today.month, today.day,
+                    int(old_hour), 0, 0, tzinfo=timezone.utc,
+                )
+            return None
+        if isinstance(raw, str):
+            try:
+                return datetime.fromisoformat(raw)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def set_reset_anchor(self, anchor: datetime) -> None:
+        """Guarda el anchor de reset y persiste."""
+        self._data["reset_anchor_utc"] = anchor.isoformat()
+        self._data.pop("reset_hour_utc", None)
+        self.save()
 
     @property
     def daily_token_limits(self) -> dict[str, int]:

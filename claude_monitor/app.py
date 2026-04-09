@@ -428,7 +428,8 @@ class ClaudeMonitorApp(rumps.App):
         plan_report = self.parser.get_plan_report(
             plan_name=self.config.plan,
             daily_limits=self.config.daily_token_limits,
-            reset_hour_utc=self.config.reset_hour_utc,
+            reset_anchor_utc=self.config.reset_anchor_utc,
+            reset_window_hours=self.config.reset_window_hours,
             target_date=today,
         )
 

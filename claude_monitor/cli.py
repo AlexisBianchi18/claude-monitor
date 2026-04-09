@@ -137,7 +137,8 @@ def main() -> None:
         report = parser.get_plan_report(
             plan_name=config.plan,
             daily_limits=config.daily_token_limits,
-            reset_hour_utc=config.reset_hour_utc,
+            reset_anchor_utc=config.reset_anchor_utc,
+            reset_window_hours=config.reset_window_hours,
             target_date=today,
         )
 

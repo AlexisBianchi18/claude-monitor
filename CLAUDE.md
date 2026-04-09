@@ -48,9 +48,9 @@ claude_monitor/
 tests/
 ├── conftest.py            — fixtures pytest
 ├── test_models.py         — 26 tests
-├── test_config.py         — 65 tests
-├── test_parser.py         — 41 tests
-├── test_plan_report.py    — 6 tests
+├── test_config.py         — 74 tests
+├── test_parser.py         — 53 tests
+├── test_plan_report.py    — 7 tests
 ├── test_extra_usage.py    — 23 tests
 ├── test_api_client.py     — 27 tests
 ├── test_pricing_fetcher.py — 25 tests
@@ -73,7 +73,7 @@ setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
 
-Total: **239 tests**.
+Total: **261 tests**.
 
 ---
 
@@ -101,7 +101,7 @@ Total: **239 tests**.
 ### Modos de uso (`usage_mode` en config.json)
 
 - **api** (default): muestra costo USD calculado con PRICING_TABLE. Titulo: `"C $0.42"`
-- **subscription**: muestra % de consumo vs limites del plan (pro, max_5x, max_20x). Titulo: `"C 45%"`
+- **subscription**: muestra % de consumo vs limites del plan (pro, max_5x, max_20x). Titulo: `"C 45%"`. Ventana de uso de 5h rolling (configurable via `reset_anchor_utc` y `reset_window_hours`)
 
 ### Auto-update
 
@@ -184,7 +184,7 @@ Caracteres `█` (U+2588, lleno) y `░` (U+2591, vacio), ancho 12 chars:
 
 ## Archivos de config del usuario
 
-- `~/.claude-monitor/config.json` — preferencias persistentes (usage_mode, plan, display_style, threshold, offsets, api_key)
+- `~/.claude-monitor/config.json` — preferencias persistentes (usage_mode, plan, display_style, threshold, offsets, api_key, reset_anchor_utc, reset_window_hours)
 - `~/.claude-monitor/pricing_cache.json` — cache de precios scrapeados
 
 ---
