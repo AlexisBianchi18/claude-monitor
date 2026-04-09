@@ -36,9 +36,10 @@ uv run pytest                     # correr tests
 claude_monitor/
 ├── __init__.py            — package marker, __version__
 ├── __main__.py            — entry point (python -m claude_monitor)
-├── models.py              — 8 dataclasses (TokenUsage, CostEntry, ProjectStats, DailyReport, RateLimitInfo, ApiCostReport, ModelUsageStatus, PlanReport)
+├── models.py              — 9 dataclasses (TokenUsage, CostEntry, ProjectStats, DailyReport, RateLimitInfo, ApiCostReport, ModelUsageStatus, PlanReport, ExtraUsageStatus)
 ├── config.py              — PRICING_TABLE, PLAN_LIMITS, ConfigManager (persiste en ~/.claude-monitor/config.json)
 ├── log_parser.py          — ClaudeLogParser: parsea ~/.claude/projects/**/*.jsonl, deduplica, calcula costos
+├── extra_usage.py         — Calculo de extra usage para modo subscription
 ├── app.py                 — ClaudeMonitorApp(rumps.App): menu bar, timer 30s, alertas, modos api/subscription, UI styled con NSAttributedString
 ├── cli.py                 — CLI formatter: tabla terminal, resumen 7 dias
 ├── api_client.py          — Cliente HTTP para API Anthropic (rate limits, cost report con admin key)
@@ -47,9 +48,10 @@ claude_monitor/
 tests/
 ├── conftest.py            — fixtures pytest
 ├── test_models.py         — 24 tests
-├── test_config.py         — 35 tests
+├── test_config.py         — 53 tests
 ├── test_parser.py         — 38 tests
 ├── test_plan_report.py    — 6 tests
+├── test_extra_usage.py    — 23 tests
 ├── test_api_client.py     — 27 tests
 ├── test_pricing_fetcher.py — 25 tests
 ├── test_updater.py     — 26 tests
@@ -71,7 +73,7 @@ setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
 
-Total: **188 tests**.
+Total: **228 tests**.
 
 ---
 
