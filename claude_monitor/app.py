@@ -301,11 +301,11 @@ class ClaudeMonitorApp(rumps.App):
 
         pct = plan_report.overall_percentage
         if pct >= 95:
-            self.title = f"\U0001f534 {pct:.0f}%"
+            self.title = f"\U0001f534 {pct:.1f}%"
         elif pct >= 80:
-            self.title = f"\u26a0 {pct:.0f}%"
+            self.title = f"\u26a0 {pct:.1f}%"
         else:
-            self.title = f"C {pct:.0f}%"
+            self.title = f"C {pct:.1f}%"
 
         self._update_subscription_menu(plan_report, report, weekly)
 
@@ -337,7 +337,7 @@ class ClaudeMonitorApp(rumps.App):
             short_name = m.model.replace("claude-", "").replace("-20251001", "")
             if style == "bar":
                 bar = _render_bar(m.percentage)
-                line = f"  {short_name:<14}{bar} {m.percentage:>3.0f}%"
+                line = f"  {short_name:<14}{bar} {m.percentage:>5.1f}%"
             else:
                 used_str = _format_tokens_short(m.tokens_used)
                 limit_str = _format_tokens_short(m.tokens_limit)
@@ -441,7 +441,7 @@ class ClaudeMonitorApp(rumps.App):
             time_str = f"{secs}s"
         # Nombre corto del modelo (ej: "claude-opus-4-6" → "opus-4-6")
         short_name = info.model.replace("claude-", "")
-        return f"{short_name}: {pct:.0f}% used \u00b7 resets in {time_str}"
+        return f"{short_name}: {pct:.1f}% used \u00b7 resets in {time_str}"
 
     def _build_menu_items(
         self,
