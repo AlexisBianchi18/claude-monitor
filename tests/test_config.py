@@ -336,6 +336,18 @@ class TestExtraUsageConfig:
         mgr.set_extra_usage_limit(-10.0)
         assert mgr.extra_usage_limit_usd == 0.0
 
+    def test_set_extra_usage_limit_ignores_inf(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_limit(60.0)
+        mgr.set_extra_usage_limit(float("inf"))
+        assert mgr.extra_usage_limit_usd == 60.0
+
+    def test_set_extra_usage_limit_ignores_nan(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_extra_usage_limit(60.0)
+        mgr.set_extra_usage_limit(float("nan"))
+        assert mgr.extra_usage_limit_usd == 60.0
+
     def test_set_extra_usage_limit_persists(self, config_path):
         mgr = ConfigManager(config_path=config_path)
         mgr.set_extra_usage_limit(40.0)

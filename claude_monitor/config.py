@@ -243,6 +243,9 @@ class ConfigManager:
 
     def set_extra_usage_limit(self, limit: float) -> None:
         """Guarda el limite de extra usage y persiste."""
+        import math
+        if not math.isfinite(limit):
+            return
         self._data["extra_usage_limit_usd"] = max(0.0, limit)
         self.save()
 
