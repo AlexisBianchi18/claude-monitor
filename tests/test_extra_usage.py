@@ -47,3 +47,11 @@ class TestExtraUsageStatus:
     def test_is_exhausted_over_limit(self):
         s = ExtraUsageStatus(limit_usd=60.0, cost_usd=65.0, alert_threshold_pct=90.0)
         assert s.is_exhausted is True
+
+    def test_is_exhausted_zero_limit(self):
+        s = ExtraUsageStatus(limit_usd=0.0, cost_usd=0.0, alert_threshold_pct=90.0)
+        assert s.is_exhausted is False
+
+    def test_percentage_over_100(self):
+        s = ExtraUsageStatus(limit_usd=60.0, cost_usd=90.0, alert_threshold_pct=90.0)
+        assert abs(s.percentage - 150.0) < 0.01

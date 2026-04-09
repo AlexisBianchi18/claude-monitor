@@ -187,4 +187,6 @@ class ExtraUsageStatus:
     @property
     def is_exhausted(self) -> bool:
         """True si se agoto el presupuesto extra."""
+        if self.limit_usd <= 0:
+            return False
         return self.cost_usd >= self.limit_usd
