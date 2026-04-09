@@ -281,8 +281,9 @@ class ClaudeMonitorApp(rumps.App):
 
         items: list = []
 
-        # Today summary
-        total_tokens_str = _format_tokens_short(report.total_tokens)
+        # Today summary (effective tokens = sin cache_read, coherente con %)
+        effective_total = sum(report.effective_tokens_by_model.values())
+        total_tokens_str = _format_tokens_short(effective_total)
         equiv_str = f"${plan_report.equivalent_api_cost:.2f}"
         today_item = rumps.MenuItem(
             f"Today: {total_tokens_str} tokens (\u2248 {equiv_str} API)",

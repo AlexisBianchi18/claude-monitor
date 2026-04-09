@@ -500,6 +500,66 @@ class TestTokensByModel:
         assert report.tokens_by_model == {}
 
 
+class TestEffectiveTokens:
+    """Tests para effective_tokens (excluye cache_read_input_tokens)."""
+
+    def test_effective_tokens_excludes_cache_read(self):
+        usage = TokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_input_tokens=5000,
+            cache_creation_input_tokens=200,
+        )
+        assert usage.total_tokens == 5350
+        assert usage.effective_tokens == 350
+
+    def test_effective_tokens_zero_cache(self):
+        usage = TokenUsage(input_tokens=200, output_tokens=100)
+        assert usage.effective_tokens == usage.total_tokens == 300
+
+    def test_effective_tokens_by_model_populated(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        assert isinstance(report.effective_tokens_by_model, dict)
+        assert "claude-opus-4-6" in report.effective_tokens_by_model
+        assert "claude-sonnet-4-6" in report.effective_tokens_by_model
+        assert "claude-haiku-4-5-20251001" in report.effective_tokens_by_model
+
+    def test_effective_tokens_less_than_total(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        for model in report.tokens_by_model:
+            assert report.effective_tokens_by_model[model] <= report.tokens_by_model[model]
+
+    def test_effective_tokens_by_model_values(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        report = parser.get_daily_report(TARGET_DATE)
+        # opus: input=100 + output=50 + cache_create=200 = 350
+        assert report.effective_tokens_by_model["claude-opus-4-6"] == 350
+        # sonnet: input=200 + output=100 = 300 (no cache)
+        assert report.effective_tokens_by_model["claude-sonnet-4-6"] == 300
+        # haiku subagent: input=500 + output=200 = 700 (no cache_create)
+        assert report.effective_tokens_by_model["claude-haiku-4-5-20251001"] == 700
+
+    def test_effective_tokens_by_model_empty_when_no_data(self):
+        parser = ClaudeLogParser(logs_dir=Path("/nonexistent/path"))
+        report = parser.get_daily_report(TARGET_DATE)
+        assert report.effective_tokens_by_model == {}
+
+    def test_plan_report_uses_effective_tokens(self, project_with_fixtures):
+        parser = ClaudeLogParser(logs_dir=project_with_fixtures)
+        limits = {
+            "claude-opus-4-6": 10_000_000,
+            "claude-sonnet-4-6": 50_000_000,
+            "claude-haiku-4-5-20251001": 150_000_000,
+        }
+        plan = parser.get_plan_report("max_5x", limits, target_date=TARGET_DATE)
+        opus = next(m for m in plan.models if "opus" in m.model)
+        # Debe usar effective_tokens (350), no total_tokens (850)
+        assert opus.tokens_used == 350
+        assert opus.percentage == pytest.approx(350 / 10_000_000 * 100)
+
+
 # --- Weekly report ---
 
 

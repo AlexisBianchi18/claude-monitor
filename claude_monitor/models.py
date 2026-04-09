@@ -26,6 +26,15 @@ class TokenUsage:
             + self.cache_creation_input_tokens
         )
 
+    @property
+    def effective_tokens(self) -> int:
+        """Tokens que cuentan hacia el límite del plan (sin cache_read)."""
+        return (
+            self.input_tokens
+            + self.output_tokens
+            + self.cache_creation_input_tokens
+        )
+
 
 @dataclass
 class CostEntry:
@@ -61,6 +70,7 @@ class DailyReport:
     projects: list[ProjectStats] = field(default_factory=list)
     models_used: set[str] = field(default_factory=set)
     tokens_by_model: dict[str, int] = field(default_factory=dict)
+    effective_tokens_by_model: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
