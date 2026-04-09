@@ -19,8 +19,9 @@ except ImportError:
 
 from .api_client import get_cost_report, get_last_error, get_rate_limits, invalidate_key
 from .config import PLAN_LIMITS, ConfigManager
+from .extra_usage import calculate_extra_usage
 from .log_parser import ClaudeLogParser
-from .models import DailyReport, PlanReport, RateLimitInfo
+from .models import DailyReport, ExtraUsageStatus, PlanReport, RateLimitInfo
 from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
 from .updater import check_for_update, detect_app_path, download_and_replace, restart_app
 
@@ -110,6 +111,9 @@ class ClaudeMonitorApp(rumps.App):
         )
         self._style_item = rumps.MenuItem(
             "Style: Bars \u2588\u2588\u2588", callback=self._on_toggle_style
+        )
+        self._extra_usage_item = rumps.MenuItem(
+            "Extra Usage Limit\u2026", callback=self._on_configure_extra_usage
         )
         self._prefs_item = rumps.MenuItem(
             "Preferences\u2026", callback=self._on_open_prefs
@@ -205,6 +209,25 @@ class ClaudeMonitorApp(rumps.App):
         """Alterna entre estilo bar y text."""
         self.config.toggle_display_style()
         self._refresh()
+
+    def _on_configure_extra_usage(self, sender: rumps.MenuItem) -> None:
+        """Muestra un dialogo para configurar el limite de extra usage."""
+        current = self.config.extra_usage_limit_usd
+        response = rumps.Window(
+            title="Extra Usage Limit",
+            message="Monthly extra usage limit in USD (0 = disabled).",
+            default_text=str(current),
+            ok="Save",
+            cancel="Cancel",
+            dimensions=(200, 24),
+        ).run()
+        if response.clicked == 1:
+            try:
+                val = float(response.text.strip())
+                self.config.set_extra_usage_limit(val)
+                self._refresh()
+            except ValueError:
+                pass
 
     @staticmethod
     def _mask_key(key: str) -> str:
@@ -378,21 +401,48 @@ class ClaudeMonitorApp(rumps.App):
             target_date=today,
         )
 
-        pct = plan_report.overall_percentage
-        if pct >= 95:
-            self.title = f"\U0001f534 {pct:.1f}%"
-        elif pct >= 80:
-            self.title = f"\u26a0 {pct:.1f}%"
-        else:
-            self.title = f"C {pct:.1f}%"
+        extra = calculate_extra_usage(
+            plan_report,
+            self.config.extra_usage_limit_usd,
+            self.config.extra_usage_alert_pct,
+        )
 
-        self._update_subscription_menu(plan_report, report, weekly)
+        if extra is None:
+            pct = plan_report.overall_percentage
+            if pct >= 95:
+                self.title = f"\U0001f534 {pct:.1f}%"
+            elif pct >= 80:
+                self.title = f"\u26a0 {pct:.1f}%"
+            else:
+                self.title = f"C {pct:.1f}%"
+        else:
+            if extra.is_exhausted:
+                self.title = f"\U0001f534 ${extra.cost_usd:.2f}/${extra.limit_usd:.0f}"
+            elif extra.is_over_alert:
+                self.title = f"\u26a0 ${extra.cost_usd:.2f}/${extra.limit_usd:.0f}"
+            else:
+                self.title = f"C ${extra.cost_usd:.2f}/${extra.limit_usd:.0f}"
+
+            # Alerta de extra usage
+            if extra.is_over_alert and not self.config.has_extra_alert_fired_today(today):
+                self.config.mark_extra_alert_fired(today)
+                rumps.notification(
+                    title="Extra Usage Alert",
+                    subtitle="Approaching extra usage limit",
+                    message=(
+                        f"${extra.cost_usd:.2f} of ${extra.limit_usd:.2f} used "
+                        f"({extra.percentage:.0f}%)"
+                    ),
+                )
+
+        self._update_subscription_menu(plan_report, report, weekly, extra)
 
     def _update_subscription_menu(
         self,
         plan_report: PlanReport,
         report: DailyReport,
         weekly: list[DailyReport],
+        extra: ExtraUsageStatus | None = None,
     ) -> None:
         """Construye el menu para modo suscripcion."""
         style = self.config.display_style
@@ -426,6 +476,17 @@ class ClaudeMonitorApp(rumps.App):
             items.append(model_item)
 
         items.append(rumps.separator)
+
+        # Extra usage line (only when active)
+        if extra is not None:
+            extra_line = (
+                f"  Extra: ${extra.cost_usd:.2f} / ${extra.limit_usd:.2f}"
+                f"  ({extra.percentage:.1f}%)"
+            )
+            extra_item = rumps.MenuItem(extra_line, callback=_noop)
+            _apply_mono_style(extra_item)
+            items.append(extra_item)
+            items.append(rumps.separator)
 
         # Reset timer
         items.append(rumps.MenuItem(
@@ -463,7 +524,7 @@ class ClaudeMonitorApp(rumps.App):
         for key in PLAN_LIMITS:
             label = PLAN_DISPLAY_NAMES.get(key, key)
             if key == current_plan:
-                label = f"✓ {label}"
+                label = f"\u2713 {label}"
             plan_menu[label] = rumps.MenuItem(
                 label, callback=lambda sender, k=key: self._on_select_plan(k)
             )
@@ -472,6 +533,7 @@ class ClaudeMonitorApp(rumps.App):
         style_label = "Bars \u2588\u2588\u2588" if style == "bar" else "Text 0/0"
         self._style_item.title = f"Style: {style_label}"
         items.append(self._style_item)
+        items.append(self._extra_usage_item)
         items.append(self._refresh_item)
         items.append(self._reset_item)
         items.append(self._prefs_item)
