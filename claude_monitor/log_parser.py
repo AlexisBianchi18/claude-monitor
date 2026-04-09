@@ -66,6 +66,47 @@ class ClaudeLogParser:
             self.get_daily_report(today - timedelta(days=i)) for i in range(6, -1, -1)
         ]
 
+    def get_plan_report(
+        self,
+        plan_name: str,
+        daily_limits: dict[str, int],
+        reset_hour_utc: int = 7,
+        target_date: date | None = None,
+    ) -> PlanReport:
+        """Genera un reporte de uso para modo suscripcion."""
+        daily = self.get_daily_report(target_date)
+
+        models: list[ModelUsageStatus] = []
+        for model, limit in sorted(daily_limits.items()):
+            tokens_used = daily.tokens_by_model.get(model, 0)
+            if tokens_used == 0:
+                continue
+            models.append(ModelUsageStatus(
+                model=model,
+                tokens_used=tokens_used,
+                tokens_limit=limit,
+            ))
+
+        estimated_reset = self._estimate_next_reset(reset_hour_utc)
+
+        return PlanReport(
+            plan_name=plan_name,
+            models=models,
+            estimated_reset=estimated_reset,
+            equivalent_api_cost=daily.total_cost,
+        )
+
+    @staticmethod
+    def _estimate_next_reset(reset_hour_utc: int) -> datetime:
+        """Calcula el proximo reset basado en la hora UTC configurada."""
+        now = datetime.now(timezone.utc)
+        today_reset = now.replace(
+            hour=reset_hour_utc, minute=0, second=0, microsecond=0
+        )
+        if now >= today_reset:
+            return today_reset + timedelta(days=1)
+        return today_reset
+
     # --- Parsing interno ---
 
     def _parse_project(
