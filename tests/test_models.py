@@ -78,6 +78,18 @@ class TestDailyReport:
         )
         assert r.models_used == {"claude-opus-4-6", "claude-sonnet-4-6"}
 
+    def test_cost_by_model_default_empty(self):
+        r = DailyReport(date=date(2026, 4, 8))
+        assert r.cost_by_model == {}
+
+    def test_cost_by_model_with_values(self):
+        r = DailyReport(
+            date=date(2026, 4, 8),
+            cost_by_model={"claude-opus-4-6": 0.30, "claude-sonnet-4-6": 0.12},
+        )
+        assert r.cost_by_model["claude-opus-4-6"] == 0.30
+        assert r.cost_by_model["claude-sonnet-4-6"] == 0.12
+
 
 class TestRateLimitInfo:
     def _make(self, limit=1000, remaining=600, reset_offset_secs=45, model="claude-sonnet-4-6"):

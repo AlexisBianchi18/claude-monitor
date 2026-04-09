@@ -71,6 +71,7 @@ class DailyReport:
     models_used: set[str] = field(default_factory=set)
     tokens_by_model: dict[str, int] = field(default_factory=dict)
     effective_tokens_by_model: dict[str, int] = field(default_factory=dict)
+    cost_by_model: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
