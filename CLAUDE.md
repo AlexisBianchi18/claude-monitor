@@ -34,7 +34,7 @@ uv run pytest                     # correr tests
 
 ```
 claude_monitor/
-├── __init__.py            — package marker
+├── __init__.py            — package marker, __version__
 ├── __main__.py            — entry point (python -m claude_monitor)
 ├── models.py              — 8 dataclasses (TokenUsage, CostEntry, ProjectStats, DailyReport, RateLimitInfo, ApiCostReport, ModelUsageStatus, PlanReport)
 ├── config.py              — PRICING_TABLE, PLAN_LIMITS, ConfigManager (persiste en ~/.claude-monitor/config.json)
@@ -43,6 +43,7 @@ claude_monitor/
 ├── cli.py                 — CLI formatter: tabla terminal, resumen 7 dias
 ├── api_client.py          — Cliente HTTP para API Anthropic (rate limits, cost report con admin key)
 ├── pricing_fetcher.py     — Scraper HTML de precios desde docs Anthropic, cache 24h
+├── updater.py             — Auto-update via GitHub Releases: check, download, replace .app, restart
 tests/
 ├── conftest.py            — fixtures pytest
 ├── test_models.py         — 24 tests
@@ -51,6 +52,7 @@ tests/
 ├── test_plan_report.py    — 6 tests
 ├── test_api_client.py     — 27 tests
 ├── test_pricing_fetcher.py — 25 tests
+├── test_updater.py     — 26 tests
 ├── fixtures/
 │   ├── sample_session.jsonl
 │   ├── sample_subagent.jsonl
@@ -68,11 +70,14 @@ docs/
 │   ├── project_key_patterns.md
 │   ├── project_status.md
 │   └── project_testing.md
+.github/
+└── workflows/
+    └── release.yml        — CI: build .app + crear GitHub Release al pushear tag v*
 setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
 
-Total: **155 tests**.
+Total: **188 tests**.
 
 ---
 
@@ -101,6 +106,15 @@ Total: **155 tests**.
 
 - **api** (default): muestra costo USD calculado con PRICING_TABLE. Titulo: `"C $0.42"`
 - **subscription**: muestra % de consumo vs limites del plan (pro, max_5x, max_20x). Titulo: `"C 45%"`
+
+### Auto-update
+
+- `updater.py` chequea `GET /repos/SirMatoran/claude-monitor/releases/latest` cada 24h
+- Si hay versión nueva, muestra item "Update available (vX.Y.Z)" en el menú
+- Al hacer click: descarga `.app.zip`, reemplaza el bundle, reinicia
+- Solo funciona como `.app` empaquetada (`sys.frozen`). Desde source solo notifica.
+- `__version__` en `__init__.py` es la fuente de verdad para comparar versiones
+- GitHub Actions (`.github/workflows/release.yml`) crea releases al pushear tag `v*`
 
 ---
 

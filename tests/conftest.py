@@ -6,6 +6,7 @@ import pytest
 
 from claude_monitor.api_client import reset_api_cache
 from claude_monitor.pricing_fetcher import reset_cache
+from claude_monitor.updater import reset_update_state
 
 
 @pytest.fixture(autouse=True)
@@ -31,3 +32,11 @@ def _isolate_api_cache():
     reset_api_cache()
     yield
     reset_api_cache()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_update_state():
+    """Limpia el estado del updater entre tests."""
+    reset_update_state()
+    yield
+    reset_update_state()

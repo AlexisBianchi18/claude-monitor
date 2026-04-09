@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import stat
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 CLAUDE_LOGS_DIR = Path.home() / ".claude" / "projects"
@@ -85,6 +85,8 @@ class ConfigManager:
         "plan": "max_5x",
         "display_style": "bar",
         "reset_hour_utc": DEFAULT_RESET_HOUR_UTC,
+        "auto_update_enabled": True,
+        "last_update_check": "",
     }
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -223,4 +225,31 @@ class ConfigManager:
         """Alterna entre 'bar' y 'text' y persiste."""
         current = self.display_style
         self._data["display_style"] = "text" if current == "bar" else "bar"
+        self.save()
+
+    # --- Auto-update ---
+
+    @property
+    def auto_update_enabled(self) -> bool:
+        return bool(self._data.get("auto_update_enabled", True))
+
+    @property
+    def last_update_check(self) -> str:
+        return str(self._data.get("last_update_check", ""))
+
+    def should_check_for_update(self) -> bool:
+        """True si no se ha chequeado en las últimas 24 horas."""
+        raw = self.last_update_check
+        if not raw:
+            return True
+        try:
+            last = datetime.fromisoformat(raw)
+            age = datetime.now(timezone.utc) - last
+            return age.total_seconds() > 24 * 3600
+        except ValueError:
+            return True
+
+    def mark_update_checked(self) -> None:
+        """Registra que se acaba de chequear actualizaciones."""
+        self._data["last_update_check"] = datetime.now(timezone.utc).isoformat()
         self.save()

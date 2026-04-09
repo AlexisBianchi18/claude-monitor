@@ -17,6 +17,7 @@ A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.a
 - **Daily reset** — reset the counter to $0.00 without losing data
 - **CLI report** — formatted terminal output for quick checks
 - **Standalone .app** — package as a native macOS app (~22 MB), no Dock icon
+- **Auto-update** — checks GitHub Releases every 24h, one-click update from the menu
 - **Privacy-first** — only reads numeric fields (`usage`, `costUSD`, `timestamp`, `model`). Never reads prompt content.
 - **API integration (optional)** — connect your Anthropic API key to see real-time rate limit usage (% tokens used, reset countdown) and actual billing costs from the Admin API
 - **Fully offline by default** — works without any API key, everything computed locally
@@ -30,7 +31,7 @@ A lightweight macOS menu bar app that tracks your [Claude Code](https://claude.a
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-monitor.git
+git clone https://github.com/SirMatoran/claude-monitor.git
 cd claude-monitor
 
 # Create virtual environment and install dependencies
@@ -56,6 +57,7 @@ The menu shows:
 | Refresh Now | Force an immediate update |
 | Reset Daily Counter | Zero out today's display (preserves actual data) |
 | Preferences | Open `config.json` in TextEdit |
+| Update available | Shown when a newer version exists on GitHub (click to install) |
 | Quit | Exit the app |
 
 ### CLI Report
@@ -100,6 +102,18 @@ The packaged app:
 - Runs standalone (bundles Python and all dependencies)
 - Doesn't appear in the Dock (`LSUIElement: true`)
 - Can be copied to `/Applications/`
+- Auto-updates when a new GitHub Release is published
+
+### Publishing a Release
+
+The app auto-updates via GitHub Releases. To publish a new version:
+
+1. Bump `__version__` in `claude_monitor/__init__.py`
+2. Commit and push
+3. Tag and push: `git tag v1.1.0 && git push origin v1.1.0`
+4. GitHub Actions builds the `.app` and creates the release automatically
+
+Users running the `.app` will see "Update available (v1.1.0)" in the menu within 24 hours.
 
 ## API Integration (Optional)
 
@@ -160,7 +174,8 @@ Settings are stored in `~/.claude-monitor/config.json` (created automatically wi
   "refresh_interval_seconds": 30,
   "cost_alert_threshold_usd": 5.0,
   "max_projects_in_menu": 10,
-  "anthropic_api_key": ""
+  "anthropic_api_key": "",
+  "auto_update_enabled": true
 }
 ```
 
@@ -187,6 +202,8 @@ claude-monitor/
 │   ├── config.py          # Model pricing, constants, ConfigManager
 │   ├── log_parser.py      # ClaudeLogParser: JSONL reading and parsing
 │   ├── api_client.py      # Anthropic API: rate limits and cost report
+│   ├── pricing_fetcher.py # Scraper de precios desde docs Anthropic
+│   ├── updater.py         # Auto-update via GitHub Releases
 │   ├── cli.py             # Formatted terminal report
 │   └── app.py             # Menu bar app (rumps) with alerts, reset, and API integration
 ├── tests/
@@ -194,6 +211,8 @@ claude-monitor/
 │   ├── test_parser.py
 │   ├── test_config.py
 │   ├── test_api_client.py
+│   ├── test_pricing_fetcher.py
+│   ├── test_updater.py
 │   └── fixtures/
 │       ├── sample_session.jsonl
 │       ├── sample_subagent.jsonl
@@ -203,6 +222,8 @@ claude-monitor/
 │   ├── plans/             # Development plans (completed)
 │   └── memory/            # AI session development notes
 ├── run_app.py             # Entry point for PyInstaller
+├── .github/workflows/
+│   └── release.yml        # CI: build .app + create GitHub Release on tag push
 ├── setup.py               # Build script (PyInstaller → .app)
 ├── requirements.txt
 ├── CLAUDE.md              # AI assistant specification
@@ -212,8 +233,8 @@ claude-monitor/
 ## Tests
 
 ```bash
-# Run all tests (111 tests)
-.venv/bin/python -m pytest tests/ -v
+# Run all tests (188 tests)
+uv run pytest tests/ -v
 ```
 
 Test coverage includes:
@@ -230,6 +251,8 @@ Test coverage includes:
 - Project name extraction from `cwd` field with directory name fallback
 - Config creation, corruption recovery, and merge behavior
 - Daily offset and alert tracking persistence
+- Auto-update version comparison, GitHub API check, download and app replacement
+- Update config: 24h check cooldown, enable/disable toggle
 
 ## How It Works
 

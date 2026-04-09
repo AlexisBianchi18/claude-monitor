@@ -1,0 +1,46 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PY_VERSION=$(python -c "from claude_monitor import __version__; print(__version__)")
+          if [ "$TAG_VERSION" != "$PY_VERSION" ]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match __version__ ($PY_VERSION)"
+            exit 1
+          fi
+
+      - name: Build .app
+        run: python setup.py
+
+      - name: Create zip archive
+        run: |
+          cd dist
+          zip -r "Claude.Monitor.app.zip" "Claude Monitor.app"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Claude.Monitor.app.zip
+          generate_release_notes: true

@@ -276,3 +276,42 @@ class TestPlanConfig:
         mgr = ConfigManager(config_path=config_path)
         limits = mgr.daily_token_limits
         assert limits == {}
+
+    # --- Auto-update config ---
+
+    def test_auto_update_enabled_default(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.auto_update_enabled is True
+
+    def test_auto_update_disabled(self, config_path):
+        config_path.write_text(json.dumps({"auto_update_enabled": False}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.auto_update_enabled is False
+
+    def test_should_check_for_update_no_timestamp(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.should_check_for_update() is True
+
+    def test_should_check_for_update_recent(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_update_checked()
+        assert mgr.should_check_for_update() is False
+
+    def test_should_check_for_update_old_timestamp(self, config_path):
+        from datetime import datetime, timedelta, timezone
+        old = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+        config_path.write_text(json.dumps({"last_update_check": old}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.should_check_for_update() is True
+
+    def test_should_check_for_update_invalid_timestamp(self, config_path):
+        config_path.write_text(json.dumps({"last_update_check": "not-a-date"}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.should_check_for_update() is True
+
+    def test_mark_update_checked_persists(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.mark_update_checked()
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.last_update_check != ""
+        assert mgr2.should_check_for_update() is False

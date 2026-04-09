@@ -3,6 +3,8 @@
 import subprocess
 import sys
 
+from claude_monitor import __version__
+
 
 def build():
     """Construye Claude Monitor.app usando PyInstaller."""
@@ -26,7 +28,8 @@ def build():
     # Parchear Info.plist para que no aparezca en el Dock
     plist_path = "dist/Claude Monitor.app/Contents/Info.plist"
     _patch_plist(plist_path)
-    print("\n✅ Build completado: dist/Claude Monitor.app")
+    _set_plist_version(plist_path, __version__)
+    print(f"\n✅ Build completado: dist/Claude Monitor.app (v{__version__})")
 
 
 def _patch_plist(plist_path: str) -> None:
@@ -48,6 +51,19 @@ def _patch_plist(plist_path: str) -> None:
         ],
         check=True,
     )
+
+
+def _set_plist_version(plist_path: str, version: str) -> None:
+    """Escribe CFBundleShortVersionString y CFBundleVersion en Info.plist."""
+    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
+        subprocess.run(
+            ["/usr/libexec/PlistBuddy", "-c", f"Add :{key} string {version}", plist_path],
+            check=False,
+        )
+        subprocess.run(
+            ["/usr/libexec/PlistBuddy", "-c", f"Set :{key} {version}", plist_path],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from .config import PLAN_LIMITS, ConfigManager
 from .log_parser import ClaudeLogParser
 from .models import DailyReport, PlanReport, RateLimitInfo
 from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
+from .updater import check_for_update, detect_app_path, download_and_replace, restart_app
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,9 @@ class ClaudeMonitorApp(rumps.App):
         self._quit_item = rumps.MenuItem("Quit", callback=self._on_quit)
 
         self._last_models_used: list[str] = []
+        self._update_available: bool = False
+        self._update_version: str | None = None
+        self._update_url: str | None = None
 
         self.menu = self._build_menu_items()
 
@@ -130,12 +134,16 @@ class ClaudeMonitorApp(rumps.App):
         # Intentar actualizar precios en background al iniciar
         self._maybe_fetch_pricing()
 
+        # Chequear actualizaciones al iniciar
+        self._maybe_check_for_update()
+
     # --- Callbacks ---
 
     def _on_timer(self, sender: rumps.Timer) -> None:
         self._refresh()
         self._maybe_fetch_pricing()
         self._maybe_poll_api()
+        self._maybe_check_for_update()
 
     def _on_refresh(self, sender: rumps.MenuItem | None = None) -> None:
         self._refresh()
@@ -240,6 +248,77 @@ class ClaudeMonitorApp(rumps.App):
         _, error = update_pricing()
         if error:
             logger.warning("Price update failed: %s", error)
+
+    # --- Auto-update ---
+
+    def _maybe_check_for_update(self) -> None:
+        """Chequea actualizaciones en background si pasaron 24h."""
+        if not self.config.auto_update_enabled:
+            return
+        if not self.config.should_check_for_update():
+            return
+        thread = threading.Thread(
+            target=self._check_update_background, daemon=True
+        )
+        thread.start()
+
+    def _check_update_background(self) -> None:
+        """Ejecuta check en un thread. Notifica si hay update."""
+        version, url = check_for_update()
+        self.config.mark_update_checked()
+        if version and url:
+            self._update_available = True
+            self._update_version = version
+            self._update_url = url
+            rumps.notification(
+                title="Claude Monitor Update",
+                subtitle=f"Version {version} available",
+                message="Click 'Update' in the menu to install.",
+            )
+
+    def _on_update(self, sender: rumps.MenuItem) -> None:
+        """Callback cuando el usuario hace click en el item de update."""
+        app_path = detect_app_path()
+
+        if app_path is None:
+            rumps.alert(
+                title="Update Available",
+                message=(
+                    f"Version {self._update_version} is available.\n"
+                    "You're running from source — auto-update is not available.\n"
+                    "Pull the latest code from GitHub to update."
+                ),
+            )
+            return
+
+        response = rumps.alert(
+            title=f"Update to v{self._update_version}?",
+            message="The app will download the update, replace itself, and restart.",
+            ok="Update Now",
+            cancel="Later",
+        )
+        if response != 1:
+            return
+
+        sender.title = "Updating..."
+        thread = threading.Thread(
+            target=self._download_update_background,
+            args=(self._update_url, app_path),
+            daemon=True,
+        )
+        thread.start()
+
+    def _download_update_background(self, url: str, app_path: str) -> None:
+        """Descarga e instala la actualización en background."""
+        error = download_and_replace(url, app_path)
+        if error:
+            rumps.notification(
+                title="Update Failed",
+                subtitle="",
+                message=error,
+            )
+            return
+        restart_app(app_path)
 
     # --- Logica de refresh ---
 
@@ -396,6 +475,12 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._refresh_item)
         items.append(self._reset_item)
         items.append(self._prefs_item)
+        if self._update_available and self._update_version:
+            items.append(rumps.separator)
+            items.append(rumps.MenuItem(
+                f"Update available (v{self._update_version})",
+                callback=self._on_update,
+            ))
         items.append(rumps.separator)
         items.append(self._quit_item)
 
@@ -476,6 +561,12 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._configure_api_item)
         items.append(self._reset_item)
         items.append(self._prefs_item)
+        if self._update_available and self._update_version:
+            items.append(rumps.separator)
+            items.append(rumps.MenuItem(
+                f"Update available (v{self._update_version})",
+                callback=self._on_update,
+            ))
         items.append(self._separator4)
         items.append(self._quit_item)
         return items
