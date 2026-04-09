@@ -34,13 +34,80 @@ jobs:
       - name: Build .app
         run: python setup.py
 
+      - name: Ad-hoc codesign
+        run: |
+          codesign --force --deep --sign - "dist/Claude Monitor.app"
+          codesign --verify "dist/Claude Monitor.app"
+
       - name: Create zip archive
         run: |
           cd dist
-          zip -r "Claude.Monitor.app.zip" "Claude Monitor.app"
+          ditto -c -k --sequesterRsrc --keepParent "Claude Monitor.app" "Claude.Monitor.app.zip"
+
+      - name: Create DMG installer
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "Claude Monitor" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Claude Monitor.app" 150 190 \
+            --app-drop-link 450 190 \
+            --no-internet-enable \
+            "dist/Claude.Monitor.dmg" \
+            "dist/Claude Monitor.app"
+
+      - name: Calculate SHA256
+        id: sha
+        run: echo "sha256=$(shasum -a 256 dist/Claude.Monitor.app.zip | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Claude.Monitor.app.zip
+          files: |
+            dist/Claude.Monitor.app.zip
+            dist/Claude.Monitor.dmg
           generate_release_notes: true
+          body: |
+            ## Instalación
+
+            ### Opción 1: Homebrew (recomendado)
+            ```bash
+            brew install --cask alexisbianchi18/tap/claude-monitor
+            ```
+
+            ### Opción 2: DMG
+            1. Descargar `Claude.Monitor.dmg`
+            2. Abrir el DMG y arrastrar la app a Applications
+            3. Si macOS muestra advertencia de seguridad, ir a **Ajustes del Sistema → Privacidad y Seguridad** y hacer click en "Abrir de todas formas"
+
+            ### Opción 3: ZIP
+            1. Descargar `Claude.Monitor.app.zip`
+            2. Descomprimir y mover a Applications
+            3. Si aparece error "está dañado", ejecutar en Terminal:
+               ```
+               xattr -cr "/Applications/Claude Monitor.app"
+               ```
+
+      - name: Update Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256="${{ steps.sha.outputs.sha256 }}"
+
+          # Clone tap repo
+          git clone https://x-access-token:${GH_TOKEN}@github.com/AlexisBianchi18/homebrew-tap.git /tmp/tap
+          cd /tmp/tap
+
+          # Update cask formula
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/claude-monitor.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/claude-monitor.rb
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/claude-monitor.rb
+          git commit -m "update claude-monitor to v${VERSION}"
+          git push
