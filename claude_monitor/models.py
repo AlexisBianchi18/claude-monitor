@@ -157,3 +157,34 @@ class PlanReport:
             return 0
         delta = self.estimated_reset - datetime.now(timezone.utc)
         return max(0, int(delta.total_seconds()))
+
+
+@dataclass
+class ExtraUsageStatus:
+    """Estado de uso extra mas alla del limite del plan."""
+
+    limit_usd: float
+    cost_usd: float
+    alert_threshold_pct: float
+
+    @property
+    def percentage(self) -> float:
+        """Porcentaje del presupuesto extra consumido (0.0 a 100.0+)."""
+        if self.limit_usd <= 0:
+            return 0.0
+        return (self.cost_usd / self.limit_usd) * 100.0
+
+    @property
+    def remaining_usd(self) -> float:
+        """Presupuesto extra restante en USD. Clamped a 0."""
+        return max(0.0, self.limit_usd - self.cost_usd)
+
+    @property
+    def is_over_alert(self) -> bool:
+        """True si el consumo supero el umbral de alerta."""
+        return self.percentage >= self.alert_threshold_pct
+
+    @property
+    def is_exhausted(self) -> bool:
+        """True si se agoto el presupuesto extra."""
+        return self.cost_usd >= self.limit_usd
