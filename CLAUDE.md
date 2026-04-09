@@ -68,7 +68,7 @@ docs/
 │   └── memory/            — notas de sesiones de desarrollo con IA
 .github/
 └── workflows/
-    └── release.yml        — CI: build .app + crear GitHub Release al pushear tag v*
+    └── release.yml        — CI: build, sign, package, release, update Homebrew tap
 setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
@@ -105,12 +105,11 @@ Total: **239 tests**.
 
 ### Auto-update
 
-- `updater.py` chequea `GET /repos/SirMatoran/claude-monitor/releases/latest` cada 24h
+- `updater.py` chequea `GET /repos/AlexisBianchi18/claude-monitor/releases/latest` cada 24h
 - Si hay versión nueva, muestra item "Update available (vX.Y.Z)" en el menú
 - Al hacer click: descarga `.app.zip`, reemplaza el bundle, reinicia
 - Solo funciona como `.app` empaquetada (`sys.frozen`). Desde source solo notifica.
 - `__version__` en `__init__.py` es la fuente de verdad para comparar versiones
-- GitHub Actions (`.github/workflows/release.yml`) crea releases al pushear tag `v*`
 
 ---
 
@@ -197,6 +196,40 @@ Se usa **PyInstaller** (NO py2app):
 ```bash
 uv run python setup.py   # genera bundle .app con LSUIElement=True (no aparece en Dock)
 ```
+
+### Repositorios
+
+| Repo | Proposito |
+|------|-----------|
+| `AlexisBianchi18/claude-monitor` | Codigo fuente principal |
+| `AlexisBianchi18/homebrew-tap` | Cask formula de Homebrew (auto-actualizado) |
+
+### Pipeline de release (GitHub Actions)
+
+El workflow `.github/workflows/release.yml` se dispara con `git push` de un tag `v*`:
+
+```
+Tag push v1.2.0
+  → Build .app con PyInstaller
+  → Ad-hoc codesign (evita error "app dañada" en macOS)
+  → ZIP con ditto (preserva atributos macOS, symlinks, permisos)
+  → DMG con create-dmg (drag-to-Applications)
+  → GitHub Release con ZIP + DMG
+  → Auto-update del Homebrew tap (version + SHA256 en Casks/claude-monitor.rb)
+```
+
+El paso "Update Homebrew tap" necesita un secret `HOMEBREW_TAP_TOKEN` (Personal
+Access Token de GitHub con scope `repo`) configurado en Settings > Secrets del
+repo principal.
+
+### Instalacion para usuarios
+
+```bash
+brew install --cask alexisbianchi18/tap/claude-monitor   # Homebrew (recomendado)
+brew upgrade claude-monitor                               # actualizar
+```
+
+Alternativas: descargar DMG o ZIP desde GitHub Releases.
 
 ---
 
