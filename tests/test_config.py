@@ -212,3 +212,67 @@ class TestApiKey:
         mgr.set_api_key("sk-ant-api03-secret")
         mode = config_path.stat().st_mode & 0o777
         assert mode == 0o600
+
+
+class TestPlanConfig:
+    def test_default_usage_mode_api(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.usage_mode == "api"
+
+    def test_set_usage_mode_subscription(self, config_path):
+        config_path.write_text(json.dumps({"usage_mode": "subscription"}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.usage_mode == "subscription"
+
+    def test_invalid_usage_mode_falls_back(self, config_path):
+        config_path.write_text(json.dumps({"usage_mode": "invalid"}))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.usage_mode == "api"
+
+    def test_default_plan(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.plan == "max_5x"
+
+    def test_default_display_style(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.display_style == "bar"
+
+    def test_toggle_display_style(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.display_style == "bar"
+        mgr.toggle_display_style()
+        assert mgr.display_style == "text"
+        mgr.toggle_display_style()
+        assert mgr.display_style == "bar"
+
+    def test_daily_token_limits_from_plan(self, config_path):
+        config_path.write_text(json.dumps({"plan": "max_5x"}))
+        mgr = ConfigManager(config_path=config_path)
+        limits = mgr.daily_token_limits
+        assert "claude-opus-4-6" in limits
+        assert limits["claude-opus-4-6"] > 0
+
+    def test_custom_daily_token_limits_override(self, config_path):
+        config_path.write_text(json.dumps({
+            "plan": "max_5x",
+            "daily_token_limits": {"claude-opus-4-6": 999},
+        }))
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.daily_token_limits["claude-opus-4-6"] == 999
+
+    def test_reset_hour_utc_default(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        assert mgr.reset_hour_utc == 7
+
+    def test_set_plan(self, config_path):
+        mgr = ConfigManager(config_path=config_path)
+        mgr.set_plan("max_20x")
+        assert mgr.plan == "max_20x"
+        mgr2 = ConfigManager(config_path=config_path)
+        assert mgr2.plan == "max_20x"
+
+    def test_unknown_plan_uses_empty_limits(self, config_path):
+        config_path.write_text(json.dumps({"plan": "nonexistent"}))
+        mgr = ConfigManager(config_path=config_path)
+        limits = mgr.daily_token_limits
+        assert limits == {}

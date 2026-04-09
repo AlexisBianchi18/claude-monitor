@@ -48,6 +48,30 @@ MAX_PROJECTS_IN_MENU = 10
 CONFIG_DIR = Path.home() / ".claude-monitor"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
+# --- Plan de suscripcion ---
+VALID_USAGE_MODES = {"api", "subscription"}
+VALID_DISPLAY_STYLES = {"bar", "text"}
+DEFAULT_RESET_HOUR_UTC = 7  # ~midnight Chile
+
+# Limites diarios estimados de tokens por plan (ajustables por el usuario)
+PLAN_LIMITS: dict[str, dict[str, int]] = {
+    "pro": {
+        "claude-opus-4-6": 2_000_000,
+        "claude-sonnet-4-6": 10_000_000,
+        "claude-haiku-4-5-20251001": 30_000_000,
+    },
+    "max_5x": {
+        "claude-opus-4-6": 10_000_000,
+        "claude-sonnet-4-6": 50_000_000,
+        "claude-haiku-4-5-20251001": 150_000_000,
+    },
+    "max_20x": {
+        "claude-opus-4-6": 40_000_000,
+        "claude-sonnet-4-6": 200_000_000,
+        "claude-haiku-4-5-20251001": 600_000_000,
+    },
+}
+
 
 class ConfigManager:
     """Gestiona configuración persistente en ~/.claude-monitor/config.json."""
@@ -57,6 +81,10 @@ class ConfigManager:
         "cost_alert_threshold_usd": COST_ALERT_THRESHOLD_USD,
         "max_projects_in_menu": MAX_PROJECTS_IN_MENU,
         "anthropic_api_key": "",
+        "usage_mode": "api",
+        "plan": "max_5x",
+        "display_style": "bar",
+        "reset_hour_utc": DEFAULT_RESET_HOUR_UTC,
     }
 
     def __init__(self, config_path: Path | None = None) -> None:
@@ -151,4 +179,46 @@ class ConfigManager:
     def set_api_key(self, key: str) -> None:
         """Guarda la API key y persiste a disco."""
         self._data["anthropic_api_key"] = key
+        self.save()
+
+    # --- Plan de suscripcion ---
+
+    @property
+    def usage_mode(self) -> str:
+        """'api' o 'subscription'."""
+        val = str(self._data.get("usage_mode", "api"))
+        return val if val in VALID_USAGE_MODES else "api"
+
+    @property
+    def plan(self) -> str:
+        return str(self._data.get("plan", "max_5x"))
+
+    @property
+    def display_style(self) -> str:
+        """'bar' o 'text'."""
+        val = str(self._data.get("display_style", "bar"))
+        return val if val in VALID_DISPLAY_STYLES else "bar"
+
+    @property
+    def reset_hour_utc(self) -> int:
+        return int(self._data.get("reset_hour_utc", DEFAULT_RESET_HOUR_UTC))
+
+    @property
+    def daily_token_limits(self) -> dict[str, int]:
+        """Limites diarios por modelo. Custom overrides > plan defaults."""
+        custom = self._data.get("daily_token_limits")
+        if isinstance(custom, dict) and custom:
+            return {k: int(v) for k, v in custom.items()}
+        return dict(PLAN_LIMITS.get(self.plan, {}))
+
+    def set_plan(self, plan: str) -> None:
+        """Cambia el plan y persiste. Limpia custom limits."""
+        self._data["plan"] = plan
+        self._data.pop("daily_token_limits", None)
+        self.save()
+
+    def toggle_display_style(self) -> None:
+        """Alterna entre 'bar' y 'text' y persiste."""
+        current = self.display_style
+        self._data["display_style"] = "text" if current == "bar" else "bar"
         self.save()
