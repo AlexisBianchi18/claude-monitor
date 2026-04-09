@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 
 @dataclass
@@ -60,6 +60,7 @@ class DailyReport:
     entry_count: int = 0
     projects: list[ProjectStats] = field(default_factory=list)
     models_used: set[str] = field(default_factory=set)
+    tokens_by_model: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -102,3 +103,47 @@ class ApiCostReport:
     fetched_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+
+@dataclass
+class ModelUsageStatus:
+    """Estado de uso de un modelo en el periodo actual."""
+
+    model: str
+    tokens_used: int
+    tokens_limit: int
+
+    @property
+    def percentage(self) -> float:
+        if self.tokens_limit <= 0:
+            return 0.0
+        return (self.tokens_used / self.tokens_limit) * 100.0
+
+    @property
+    def tokens_remaining(self) -> int:
+        return max(0, self.tokens_limit - self.tokens_used)
+
+
+@dataclass
+class PlanReport:
+    """Reporte de uso del plan de suscripcion."""
+
+    plan_name: str
+    models: list[ModelUsageStatus]
+    estimated_reset: datetime | None
+    equivalent_api_cost: float
+
+    @property
+    def overall_percentage(self) -> float:
+        total_used = sum(m.tokens_used for m in self.models)
+        total_limit = sum(m.tokens_limit for m in self.models)
+        if total_limit <= 0:
+            return 0.0
+        return (total_used / total_limit) * 100.0
+
+    @property
+    def seconds_until_reset(self) -> int:
+        if self.estimated_reset is None:
+            return 0
+        delta = self.estimated_reset - datetime.now(timezone.utc)
+        return max(0, int(delta.total_seconds()))

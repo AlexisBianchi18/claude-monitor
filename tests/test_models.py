@@ -1,11 +1,13 @@
 """Tests para models.py."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from claude_monitor.models import (
     ApiCostReport,
     CostEntry,
     DailyReport,
+    ModelUsageStatus,
+    PlanReport,
     ProjectStats,
     RateLimitInfo,
     TokenUsage,
@@ -135,3 +137,76 @@ class TestApiCostReport:
         r = ApiCostReport(date=date(2026, 4, 8), total_cost_usd=0.0)
         age = (datetime.now(timezone.utc) - r.fetched_at).total_seconds()
         assert age < 2
+
+
+class TestModelUsageStatus:
+    def test_from_values(self):
+        status = ModelUsageStatus(
+            model="claude-opus-4-6",
+            tokens_used=4_000_000,
+            tokens_limit=10_000_000,
+        )
+        assert status.percentage == 40.0
+        assert status.tokens_remaining == 6_000_000
+
+    def test_zero_limit(self):
+        status = ModelUsageStatus(
+            model="claude-opus-4-6",
+            tokens_used=100,
+            tokens_limit=0,
+        )
+        assert status.percentage == 0.0
+        assert status.tokens_remaining == 0
+
+    def test_over_limit(self):
+        status = ModelUsageStatus(
+            model="claude-opus-4-6",
+            tokens_used=12_000_000,
+            tokens_limit=10_000_000,
+        )
+        assert status.percentage == 120.0
+        assert status.tokens_remaining == 0
+
+
+class TestPlanReport:
+    def test_overall_percentage(self):
+        models = [
+            ModelUsageStatus(model="a", tokens_used=5_000_000, tokens_limit=10_000_000),
+            ModelUsageStatus(model="b", tokens_used=3_000_000, tokens_limit=10_000_000),
+        ]
+        report = PlanReport(
+            plan_name="max_5x",
+            models=models,
+            estimated_reset=None,
+            equivalent_api_cost=12.50,
+        )
+        assert report.overall_percentage == 40.0
+
+    def test_overall_percentage_no_models(self):
+        report = PlanReport(
+            plan_name="max_5x",
+            models=[],
+            estimated_reset=None,
+            equivalent_api_cost=0.0,
+        )
+        assert report.overall_percentage == 0.0
+
+    def test_seconds_until_reset(self):
+        future = datetime.now(timezone.utc) + timedelta(hours=2)
+        report = PlanReport(
+            plan_name="max_5x",
+            models=[],
+            estimated_reset=future,
+            equivalent_api_cost=0.0,
+        )
+        secs = report.seconds_until_reset
+        assert 7100 < secs <= 7200
+
+    def test_seconds_until_reset_none(self):
+        report = PlanReport(
+            plan_name="max_5x",
+            models=[],
+            estimated_reset=None,
+            equivalent_api_cost=0.0,
+        )
+        assert report.seconds_until_reset == 0
