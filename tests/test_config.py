@@ -512,17 +512,17 @@ class TestSubscription:
     def test_session_budget_default_max_5x(self, config_path):
         config_path.write_text(json.dumps({"plan": "max_5x"}))
         mgr = ConfigManager(config_path=config_path)
-        assert mgr.session_budget_usd == 11.48
+        assert mgr.session_budget_usd == 20.26
 
     def test_session_budget_default_pro(self, config_path):
         config_path.write_text(json.dumps({"plan": "pro"}))
         mgr = ConfigManager(config_path=config_path)
-        assert abs(mgr.session_budget_usd - 2.30) < 0.01
+        assert abs(mgr.session_budget_usd - 4.05) < 0.01
 
     def test_session_budget_default_max_20x(self, config_path):
         config_path.write_text(json.dumps({"plan": "max_20x"}))
         mgr = ConfigManager(config_path=config_path)
-        assert abs(mgr.session_budget_usd - 45.92) < 0.01
+        assert abs(mgr.session_budget_usd - 81.04) < 0.01
 
     def test_session_budget_custom_override(self, config_path):
         config_path.write_text(json.dumps({
@@ -535,7 +535,7 @@ class TestSubscription:
     def test_session_budget_unknown_plan_fallback(self, config_path):
         config_path.write_text(json.dumps({"plan": "nonexistent"}))
         mgr = ConfigManager(config_path=config_path)
-        assert mgr.session_budget_usd == 11.48
+        assert mgr.session_budget_usd == 20.26
 
     def test_set_session_budget(self, config_path):
         mgr = ConfigManager(config_path=config_path)
@@ -548,4 +548,4 @@ class TestSubscription:
         mgr = ConfigManager(config_path=config_path)
         mgr.set_session_budget(15.0)
         mgr.set_plan("pro")
-        assert abs(mgr.session_budget_usd - 2.30) < 0.01
+        assert abs(mgr.session_budget_usd - 4.05) < 0.01

@@ -73,11 +73,12 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
 }
 
 # Presupuestos de sesion en USD-equivalentes por ventana de 5h.
-# Calibrado 2026-04-09: Max 5x = $11.48 (medido vs claude.ai 31%).
+# Calibrado 2026-04-10: Max 5x = $20.26 (medido vs claude.ai 7%, ventana alineada).
+# Nota: estos valores son aproximaciones. Usar --calibrate para ajustar.
 SESSION_BUDGETS: dict[str, float] = {
-    "pro": 2.30,
-    "max_5x": 11.48,
-    "max_20x": 45.92,
+    "pro": 4.05,
+    "max_5x": 20.26,
+    "max_20x": 81.04,
 }
 
 
@@ -267,7 +268,7 @@ class ConfigManager:
         custom = self._data.get("session_budget_usd")
         if custom is not None:
             return float(custom)
-        return SESSION_BUDGETS.get(self.plan, 11.48)
+        return SESSION_BUDGETS.get(self.plan, 20.26)
 
     def set_session_budget(self, budget: float) -> None:
         """Guarda un presupuesto de sesion custom y persiste."""
