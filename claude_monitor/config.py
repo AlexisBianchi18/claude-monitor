@@ -72,6 +72,14 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
     },
 }
 
+# Presupuestos de sesion en USD-equivalentes por ventana de 5h.
+# Calibrado 2026-04-09: Max 5x = $11.48 (medido vs claude.ai 31%).
+SESSION_BUDGETS: dict[str, float] = {
+    "pro": 2.30,
+    "max_5x": 11.48,
+    "max_20x": 45.92,
+}
+
 
 class ConfigManager:
     """Gestiona configuración persistente en ~/.claude-monitor/config.json."""
@@ -247,9 +255,23 @@ class ConfigManager:
         return base
 
     def set_plan(self, plan: str) -> None:
-        """Cambia el plan y persiste. Limpia custom limits."""
+        """Cambia el plan y persiste. Limpia custom limits y budget."""
         self._data["plan"] = plan
         self._data.pop("daily_token_limits", None)
+        self._data.pop("session_budget_usd", None)
+        self.save()
+
+    @property
+    def session_budget_usd(self) -> float:
+        """Presupuesto de sesion en USD. Custom override o default por plan."""
+        custom = self._data.get("session_budget_usd")
+        if custom is not None:
+            return float(custom)
+        return SESSION_BUDGETS.get(self.plan, 11.48)
+
+    def set_session_budget(self, budget: float) -> None:
+        """Guarda un presupuesto de sesion custom y persiste."""
+        self._data["session_budget_usd"] = budget
         self.save()
 
     def toggle_display_style(self) -> None:
