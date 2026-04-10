@@ -44,7 +44,6 @@ claude_monitor/
 ├── cli.py                 — CLI formatter: tabla terminal, resumen 7 dias
 ├── api_client.py          — Cliente HTTP para API Anthropic (rate limits, cost report con admin key)
 ├── pricing_fetcher.py     — Scraper HTML de precios desde docs Anthropic, cache 24h
-├── updater.py             — Auto-update via GitHub Releases: check, download, replace .app, restart
 tests/
 ├── conftest.py            — fixtures pytest
 ├── test_models.py         — 26 tests
@@ -54,7 +53,7 @@ tests/
 ├── test_extra_usage.py    — 23 tests
 ├── test_api_client.py     — 27 tests
 ├── test_pricing_fetcher.py — 25 tests
-├── test_updater.py     — 26 tests
+├── test_version_check.py  — 16 tests
 ├── fixtures/
 │   ├── sample_session.jsonl
 │   ├── sample_subagent.jsonl
@@ -73,7 +72,7 @@ setup.py                   — wrapper que invoca PyInstaller para generar .app
 CLAUDE.md                  — este archivo
 ```
 
-Total: **261 tests**.
+Total: **252 tests**.
 
 ---
 
@@ -103,12 +102,13 @@ Total: **261 tests**.
 - **api** (default): muestra costo USD calculado con PRICING_TABLE. Titulo: `"C $0.42"`
 - **subscription**: muestra % de consumo vs limites del plan (pro, max_5x, max_20x). Titulo: `"C 45%"`. Ventana de uso de 5h rolling (configurable via `reset_anchor_utc` y `reset_window_hours`)
 
-### Auto-update
+### Version check
 
-- `updater.py` chequea `GET /repos/AlexisBianchi18/claude-monitor/releases/latest` cada 24h
-- Si hay versión nueva, muestra item "Update available (vX.Y.Z)" en el menú
-- Al hacer click: descarga `.app.zip`, reemplaza el bundle, reinicia
-- Solo funciona como `.app` empaquetada (`sys.frozen`). Desde source solo notifica.
+- Item fijo "Version X.Y.Z" en el menú (antes de Quit)
+- Al hacer click: ejecuta `brew info --cask alexisbianchi18/tap/claude-monitor --json=v2` en background
+- Si hay versión nueva: muestra alert con instrucciones (`brew upgrade claude-monitor`)
+- Si está al día: muestra "You're Up to Date"
+- Si Homebrew no está instalado: muestra link a GitHub Releases como fallback
 - `__version__` en `__init__.py` es la fuente de verdad para comparar versiones
 
 ---

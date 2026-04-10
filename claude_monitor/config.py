@@ -95,8 +95,6 @@ class ConfigManager:
         "display_style": "bar",
         "reset_window_hours": DEFAULT_RESET_WINDOW_HOURS,
         "reset_anchor_utc": None,
-        "auto_update_enabled": True,
-        "last_update_check": "",
         "extra_usage_limit_usd": 0.0,
         "extra_usage_alert_pct": 90.0,
         "selected_model": None,
@@ -330,29 +328,3 @@ class ConfigManager:
         self._data["selected_model"] = model
         self.save()
 
-    # --- Auto-update ---
-
-    @property
-    def auto_update_enabled(self) -> bool:
-        return bool(self._data.get("auto_update_enabled", True))
-
-    @property
-    def last_update_check(self) -> str:
-        return str(self._data.get("last_update_check", ""))
-
-    def should_check_for_update(self) -> bool:
-        """True si no se ha chequeado en las últimas 24 horas."""
-        raw = self.last_update_check
-        if not raw:
-            return True
-        try:
-            last = datetime.fromisoformat(raw)
-            age = datetime.now(timezone.utc) - last
-            return age.total_seconds() > 24 * 3600
-        except ValueError:
-            return True
-
-    def mark_update_checked(self) -> None:
-        """Registra que se acaba de chequear actualizaciones."""
-        self._data["last_update_check"] = datetime.now(timezone.utc).isoformat()
-        self.save()

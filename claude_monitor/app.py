@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import shutil
+import subprocess
 import threading
 from datetime import date
 
@@ -23,7 +26,7 @@ from .extra_usage import calculate_extra_usage
 from .log_parser import ClaudeLogParser
 from .models import DailyReport, ExtraUsageStatus, PlanReport, RateLimitInfo
 from .pricing_fetcher import get_pricing_age, should_fetch, update_pricing
-from .updater import check_for_update, detect_app_path, download_and_replace, restart_app
+from . import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -129,13 +132,13 @@ class ClaudeMonitorApp(rumps.App):
         self._prefs_item = rumps.MenuItem(
             "Preferences\u2026", callback=self._on_open_prefs
         )
+        self._version_item = rumps.MenuItem(
+            f"Version {__version__}", callback=self._on_check_update
+        )
         self._separator4 = rumps.separator
         self._quit_item = rumps.MenuItem("Quit", callback=self._on_quit)
 
         self._last_models_used: list[str] = []
-        self._update_available: bool = False
-        self._update_version: str | None = None
-        self._update_url: str | None = None
 
         self.menu = self._build_menu_items()
 
@@ -149,16 +152,12 @@ class ClaudeMonitorApp(rumps.App):
         # Intentar actualizar precios en background al iniciar
         self._maybe_fetch_pricing()
 
-        # Chequear actualizaciones al iniciar
-        self._maybe_check_for_update()
-
     # --- Callbacks ---
 
     def _on_timer(self, sender: rumps.Timer) -> None:
         self._refresh()
         self._maybe_fetch_pricing()
         self._maybe_poll_api()
-        self._maybe_check_for_update()
 
     def _on_refresh(self, sender: rumps.MenuItem | None = None) -> None:
         self._refresh()
@@ -338,76 +337,95 @@ class ClaudeMonitorApp(rumps.App):
         if error:
             logger.warning("Price update failed: %s", error)
 
-    # --- Auto-update ---
+    # --- Version check via Homebrew ---
 
-    def _maybe_check_for_update(self) -> None:
-        """Chequea actualizaciones en background si pasaron 24h."""
-        if not self.config.auto_update_enabled:
-            return
-        if not self.config.should_check_for_update():
-            return
+    def _on_check_update(self, sender: rumps.MenuItem) -> None:
+        """Chequea si hay nueva versión via Homebrew en background."""
+        sender.title = f"Version {__version__} (checking...)"
         thread = threading.Thread(
-            target=self._check_update_background, daemon=True
+            target=self._check_brew_update, daemon=True
         )
         thread.start()
 
-    def _check_update_background(self) -> None:
-        """Ejecuta check en un thread. Notifica si hay update."""
-        version, url = check_for_update()
-        self.config.mark_update_checked()
-        if version and url:
-            self._update_available = True
-            self._update_version = version
-            self._update_url = url
-            rumps.notification(
-                title="Claude Monitor Update",
-                subtitle=f"Version {version} available",
-                message="Click 'Update' in the menu to install.",
-            )
+    def _check_brew_update(self) -> None:
+        """Ejecuta brew info en background y muestra resultado."""
+        brew_path = shutil.which("brew")
+        if brew_path is None:
+            # Fallback: rutas comunes de Homebrew
+            for path in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew"):
+                if os.path.isfile(path):
+                    brew_path = path
+                    break
 
-    def _on_update(self, sender: rumps.MenuItem) -> None:
-        """Callback cuando el usuario hace click en el item de update."""
-        app_path = detect_app_path()
-
-        if app_path is None:
+        if brew_path is None:
             rumps.alert(
-                title="Update Available",
+                title=f"Claude Monitor v{__version__}",
                 message=(
-                    f"Version {self._update_version} is available.\n"
-                    "You're running from source — auto-update is not available.\n"
-                    "Pull the latest code from GitHub to update."
+                    "Homebrew not found.\n\n"
+                    "Visit https://github.com/SirMatoran/claude-monitor/releases "
+                    "to check for updates."
                 ),
             )
+            self._version_item.title = f"Version {__version__}"
             return
 
-        response = rumps.alert(
-            title=f"Update to v{self._update_version}?",
-            message="The app will download the update, replace itself, and restart.",
-            ok="Update Now",
-            cancel="Later",
-        )
-        if response != 1:
-            return
-
-        sender.title = "Updating..."
-        thread = threading.Thread(
-            target=self._download_update_background,
-            args=(self._update_url, app_path),
-            daemon=True,
-        )
-        thread.start()
-
-    def _download_update_background(self, url: str, app_path: str) -> None:
-        """Descarga e instala la actualización en background."""
-        error = download_and_replace(url, app_path)
-        if error:
-            rumps.notification(
-                title="Update Failed",
-                subtitle="",
-                message=error,
+        try:
+            result = subprocess.run(
+                [brew_path, "info", "--cask", "alexisbianchi18/tap/claude-monitor", "--json=v2"],
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
-            return
-        restart_app(app_path)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or "brew info failed")
+
+            data = json.loads(result.stdout)
+            casks = data.get("casks", [])
+            if not casks:
+                raise RuntimeError("Cask not found in brew info output")
+
+            latest = casks[0].get("version", "")
+            if not latest:
+                raise RuntimeError("No version in cask info")
+
+            if self._is_newer(latest, __version__):
+                rumps.alert(
+                    title=f"Update Available: v{latest}",
+                    message=(
+                        f"You have v{__version__}. "
+                        f"Version {latest} is available.\n\n"
+                        "To update, run in Terminal:\n\n"
+                        "  brew upgrade claude-monitor"
+                    ),
+                )
+            else:
+                rumps.alert(
+                    title="You're Up to Date",
+                    message=f"Claude Monitor v{__version__} is the latest version.",
+                )
+
+        except Exception as exc:
+            logger.warning("Brew update check failed: %s", exc)
+            rumps.alert(
+                title=f"Claude Monitor v{__version__}",
+                message=(
+                    f"Could not check for updates: {exc}\n\n"
+                    "Visit https://github.com/SirMatoran/claude-monitor/releases "
+                    "to check manually."
+                ),
+            )
+        finally:
+            self._version_item.title = f"Version {__version__}"
+
+    @staticmethod
+    def _is_newer(remote: str, local: str) -> bool:
+        """True si la versión remota es estrictamente mayor que la local."""
+        try:
+            r = tuple(int(x) for x in remote.split("."))
+            l = tuple(int(x) for x in local.split("."))  # noqa: E741
+            return r > l
+        except (ValueError, TypeError, AttributeError):
+            return False
 
     # --- Logica de refresh ---
 
@@ -640,12 +658,8 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._refresh_item)
         items.append(self._reset_item)
         items.append(self._prefs_item)
-        if self._update_available and self._update_version:
-            items.append(rumps.separator)
-            items.append(rumps.MenuItem(
-                f"Update available (v{self._update_version})",
-                callback=self._on_update,
-            ))
+        items.append(rumps.separator)
+        items.append(self._version_item)
         items.append(rumps.separator)
         items.append(self._quit_item)
 
@@ -737,12 +751,8 @@ class ClaudeMonitorApp(rumps.App):
         items.append(self._configure_api_item)
         items.append(self._reset_item)
         items.append(self._prefs_item)
-        if self._update_available and self._update_version:
-            items.append(rumps.separator)
-            items.append(rumps.MenuItem(
-                f"Update available (v{self._update_version})",
-                callback=self._on_update,
-            ))
+        items.append(rumps.separator)
+        items.append(self._version_item)
         items.append(self._separator4)
         items.append(self._quit_item)
         return items
