@@ -99,9 +99,7 @@ def _print_plan_report(report: PlanReport, style: str) -> None:
             bar = _render_bar(m.percentage)
             print(f"  {short_name:<20} {bar}  {m.percentage:.1f}%")
         else:
-            used = _format_tokens_short(m.tokens_used)
-            limit = _format_tokens_short(m.tokens_limit)
-            print(f"  {short_name:<20} {used} / {limit}")
+            print(f"  {short_name:<20} ${m.cost_usd:.2f} / ${m.session_budget_usd:.2f}")
 
     print()
     reset_str = _format_reset_time(report.seconds_until_reset)
@@ -136,7 +134,7 @@ def main() -> None:
     if config.usage_mode == "subscription":
         report = parser.get_plan_report(
             plan_name=config.plan,
-            daily_limits=config.daily_token_limits,
+            session_budget_usd=config.session_budget_usd,
             reset_anchor_utc=config.reset_anchor_utc,
             reset_window_hours=config.reset_window_hours,
             target_date=today,

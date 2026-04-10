@@ -427,7 +427,7 @@ class ClaudeMonitorApp(rumps.App):
         """Refresh en modo suscripcion."""
         plan_report = self.parser.get_plan_report(
             plan_name=self.config.plan,
-            daily_limits=self.config.daily_token_limits,
+            session_budget_usd=self.config.session_budget_usd,
             reset_anchor_utc=self.config.reset_anchor_utc,
             reset_window_hours=self.config.reset_window_hours,
             target_date=today,
@@ -520,9 +520,8 @@ class ClaudeMonitorApp(rumps.App):
                 bar = _render_bar(m.percentage)
                 line = f"{prefix} {short_name:<14}{bar} {m.percentage:>5.1f}%"
             else:
-                used_str = _format_tokens_short(m.tokens_used)
-                limit_str = _format_tokens_short(m.tokens_limit)
-                line = f"{prefix} {short_name:<14}{used_str:>5} / {limit_str:<5}"
+                budget_str = f"${m.session_budget_usd:.2f}"
+                line = f"{prefix} {short_name:<14}${m.cost_usd:.2f} / {budget_str}"
             model_item = rumps.MenuItem(
                 line,
                 callback=lambda sender, model=m.model: self._on_select_model(model),
