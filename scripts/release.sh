@@ -31,15 +31,11 @@ if [[ "$BRANCH" != "main" ]]; then
     [[ "$yn" =~ ^[Yy]$ ]] || exit 0
 fi
 
-# ── 2. Verificar que hay cambios ─────────────────────────────────────────────
+# ── 2. Mostrar estado del working tree ───────────────────────────────────────
 if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
-    warn "No hay cambios en el working tree."
-    read -rp "Continuar sin cambios nuevos? (solo tag + push) [y/N] " yn
-    [[ "$yn" =~ ^[Yy]$ ]] || exit 0
-    SKIP_COMMIT=true
+    ok "Working tree limpio."
 else
-    SKIP_COMMIT=false
-    echo -e "${BOLD}Cambios pendientes:${NC}"
+    echo -e "${BOLD}Cambios pendientes (se incluiran en el commit):${NC}"
     echo ""
     git status --short
     echo ""
@@ -102,19 +98,15 @@ fi
 echo ""
 
 # ── 6. Pedir mensaje de commit ──────────────────────────────────────────────
-if [[ "$SKIP_COMMIT" == false ]]; then
-    read -rp "Mensaje de commit (o Enter para default): " COMMIT_MSG
-    COMMIT_MSG="${COMMIT_MSG:-"release: version $NEW_VERSION"}"
-    echo ""
-fi
+read -rp "Mensaje de commit (o Enter para 'release: version $NEW_VERSION'): " COMMIT_MSG
+COMMIT_MSG="${COMMIT_MSG:-"release: version $NEW_VERSION"}"
+echo ""
 
 # ── 7. Resumen y confirmacion ───────────────────────────────────────────────
 echo -e "${BOLD}Resumen:${NC}"
 echo "  Version:  $CURRENT_VERSION -> $NEW_VERSION"
 echo "  Tag:      v$NEW_VERSION"
-if [[ "$SKIP_COMMIT" == false ]]; then
-    echo "  Commit:   $COMMIT_MSG"
-fi
+echo "  Commit:   $COMMIT_MSG"
 echo "  Branch:   $BRANCH"
 echo "  Push:     origin/$BRANCH + tag v$NEW_VERSION"
 
@@ -148,12 +140,10 @@ fi
 ok "Version bumped."
 
 # ── 9. Commit ───────────────────────────────────────────────────────────────
-if [[ "$SKIP_COMMIT" == false ]]; then
-    info "Staging y commit..."
-    git add -A
-    git commit -m "$COMMIT_MSG"
-    ok "Commit creado."
-fi
+info "Staging y commit..."
+git add -A
+git commit -m "$COMMIT_MSG"
+ok "Commit creado."
 
 # ── 10. Tag ─────────────────────────────────────────────────────────────────
 info "Creando tag v$NEW_VERSION..."
