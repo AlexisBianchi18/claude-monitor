@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from claude_monitor.extra_usage import calculate_extra_usage
-from claude_monitor.models import ExtraUsageStatus, ModelUsageStatus, PlanReport
+from claude_monitor.models import ExtraUsageStatus, PlanReport
 
 
 class TestExtraUsageStatus:
@@ -61,112 +61,67 @@ class TestExtraUsageStatus:
 
 
 def _make_plan_report(
-    models: list[ModelUsageStatus],
     equivalent_api_cost: float = 0.0,
+    session_budget_usd: float = 10.0,
 ) -> PlanReport:
     return PlanReport(
         plan_name="max_5x",
-        models=models,
+        models=[],
         estimated_reset=datetime(2026, 4, 9, 7, 0, 0, tzinfo=timezone.utc),
         equivalent_api_cost=equivalent_api_cost,
+        session_budget_usd=session_budget_usd,
     )
 
 
 class TestCalculateExtraUsage:
     def test_returns_none_when_limit_negative(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
-            equivalent_api_cost=75.0,
-        )
+        report = _make_plan_report(equivalent_api_cost=15.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=-1.0, alert_threshold_pct=90.0)
         assert result is None
 
     def test_returns_none_when_limit_zero(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
-            equivalent_api_cost=50.0,
-        )
+        report = _make_plan_report(equivalent_api_cost=15.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=0.0, alert_threshold_pct=90.0)
         assert result is None
 
     def test_returns_none_when_below_100_pct(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 5_000_000, 10_000_000)],
-            equivalent_api_cost=25.0,
-        )
+        report = _make_plan_report(equivalent_api_cost=5.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
         assert result is None
 
     def test_returns_status_when_over_100_pct(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
-            equivalent_api_cost=75.0,
-        )
+        report = _make_plan_report(equivalent_api_cost=15.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
         assert result is not None
         assert isinstance(result, ExtraUsageStatus)
         assert result.limit_usd == 60.0
 
     def test_extra_cost_calculation(self):
-        # 15M used, 10M limit -> 5M extra tokens -> 5/15 * 75 = 25.0
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
-            equivalent_api_cost=75.0,
-        )
+        # budget=10, cost=15 -> extra = 15-10 = $5.00
+        report = _make_plan_report(equivalent_api_cost=15.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
         assert result is not None
-        assert abs(result.cost_usd - 25.0) < 0.01
-
-    def test_multiple_models(self):
-        # opus: 12M used / 10M limit -> 2M extra
-        # sonnet: 60M used / 50M limit -> 10M extra
-        # total: 72M used, 60M limit, 12M extra -> 12/72 * 36.0 = 6.0
-        report = _make_plan_report(
-            [
-                ModelUsageStatus("claude-opus-4-6", 12_000_000, 10_000_000),
-                ModelUsageStatus("claude-sonnet-4-6", 60_000_000, 50_000_000),
-            ],
-            equivalent_api_cost=36.0,
-        )
-        result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
-        assert result is not None
-        assert abs(result.cost_usd - 6.0) < 0.01
-
-    def test_only_one_model_over_limit(self):
-        # opus: 15M / 10M -> over, but sonnet: 30M / 50M -> under
-        # total: 45M used, 60M limit -> overall 75% < 100% -> None
-        report = _make_plan_report(
-            [
-                ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000),
-                ModelUsageStatus("claude-sonnet-4-6", 30_000_000, 50_000_000),
-            ],
-            equivalent_api_cost=50.0,
-        )
-        result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
-        assert result is None
+        assert abs(result.cost_usd - 5.0) < 0.01
 
     def test_alert_threshold_passed_through(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 15_000_000, 10_000_000)],
-            equivalent_api_cost=75.0,
-        )
+        report = _make_plan_report(equivalent_api_cost=15.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=80.0)
         assert result is not None
         assert result.alert_threshold_pct == 80.0
 
-    def test_zero_tokens_used(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 0, 0)],
-            equivalent_api_cost=0.0,
-        )
+    def test_zero_cost(self):
+        report = _make_plan_report(equivalent_api_cost=0.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
         assert result is None
 
     def test_exact_100_pct_triggers(self):
-        report = _make_plan_report(
-            [ModelUsageStatus("claude-opus-4-6", 10_000_000, 10_000_000)],
-            equivalent_api_cost=50.0,
-        )
+        # cost == budget -> 100% -> triggers, but extra_cost = 0
+        report = _make_plan_report(equivalent_api_cost=10.0, session_budget_usd=10.0)
         result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
         assert result is not None
         assert result.cost_usd == 0.0
+
+    def test_zero_budget(self):
+        report = _make_plan_report(equivalent_api_cost=0.0, session_budget_usd=0.0)
+        result = calculate_extra_usage(report, extra_limit_usd=60.0, alert_threshold_pct=90.0)
+        assert result is None

@@ -546,18 +546,13 @@ class TestEffectiveTokens:
         report = parser.get_daily_report(TARGET_DATE)
         assert report.effective_tokens_by_model == {}
 
-    def test_plan_report_uses_effective_tokens(self, project_with_fixtures):
+    def test_plan_report_uses_cost_by_model(self, project_with_fixtures):
         parser = ClaudeLogParser(logs_dir=project_with_fixtures)
-        limits = {
-            "claude-opus-4-6": 10_000_000,
-            "claude-sonnet-4-6": 50_000_000,
-            "claude-haiku-4-5-20251001": 150_000_000,
-        }
-        plan = parser.get_plan_report("max_5x", limits, target_date=TARGET_DATE)
+        plan = parser.get_plan_report("max_5x", session_budget_usd=11.48, target_date=TARGET_DATE)
         opus = next(m for m in plan.models if "opus" in m.model)
-        # Debe usar effective_tokens (350), no total_tokens (850)
-        assert opus.tokens_used == 350
-        assert opus.percentage == pytest.approx(350 / 10_000_000 * 100)
+        # Debe usar cost_by_model, no tokens
+        assert opus.cost_usd > 0
+        assert opus.session_budget_usd == 11.48
 
 
 class TestCostByModel:

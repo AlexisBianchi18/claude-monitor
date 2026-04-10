@@ -137,33 +137,32 @@ class ClaudeLogParser:
     def get_plan_report(
         self,
         plan_name: str,
-        daily_limits: dict[str, int],
+        session_budget_usd: float,
         reset_anchor_utc: datetime | None = None,
         reset_window_hours: int = 5,
         target_date: date | None = None,
         *,
         _now: datetime | None = None,
     ) -> PlanReport:
-        """Genera un reporte de uso para modo suscripcion."""
+        """Genera un reporte de uso para modo suscripcion (basado en costo)."""
         if reset_anchor_utc is not None:
             window_start, window_end = self._compute_window_boundaries(
                 reset_anchor_utc, reset_window_hours, _now=_now
             )
             window_report = self.get_window_report(window_start, window_end)
-            effective_by_model = window_report.effective_tokens_by_model
+            cost_by_model = window_report.cost_by_model
             equivalent_cost = window_report.total_cost
         else:
             daily = self.get_daily_report(target_date)
-            effective_by_model = daily.effective_tokens_by_model
+            cost_by_model = daily.cost_by_model
             equivalent_cost = daily.total_cost
 
         models: list[ModelUsageStatus] = []
-        for model, limit in sorted(daily_limits.items()):
-            tokens_used = effective_by_model.get(model, 0)
+        for model, cost in sorted(cost_by_model.items()):
             models.append(ModelUsageStatus(
                 model=model,
-                tokens_used=tokens_used,
-                tokens_limit=limit,
+                cost_usd=cost,
+                session_budget_usd=session_budget_usd,
             ))
 
         estimated_reset = self._estimate_next_reset(
@@ -175,6 +174,7 @@ class ClaudeLogParser:
             models=models,
             estimated_reset=estimated_reset,
             equivalent_api_cost=equivalent_cost,
+            session_budget_usd=session_budget_usd,
         )
 
     @staticmethod

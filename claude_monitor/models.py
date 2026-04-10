@@ -118,21 +118,17 @@ class ApiCostReport:
 
 @dataclass
 class ModelUsageStatus:
-    """Estado de uso de un modelo en el periodo actual."""
+    """Estado de uso de un modelo en el periodo actual (basado en costo)."""
 
     model: str
-    tokens_used: int
-    tokens_limit: int
+    cost_usd: float
+    session_budget_usd: float
 
     @property
     def percentage(self) -> float:
-        if self.tokens_limit <= 0:
+        if self.session_budget_usd <= 0:
             return 0.0
-        return (self.tokens_used / self.tokens_limit) * 100.0
-
-    @property
-    def tokens_remaining(self) -> int:
-        return max(0, self.tokens_limit - self.tokens_used)
+        return (self.cost_usd / self.session_budget_usd) * 100.0
 
 
 @dataclass
@@ -143,14 +139,13 @@ class PlanReport:
     models: list[ModelUsageStatus]
     estimated_reset: datetime | None
     equivalent_api_cost: float
+    session_budget_usd: float
 
     @property
     def overall_percentage(self) -> float:
-        total_used = sum(m.tokens_used for m in self.models)
-        total_limit = sum(m.tokens_limit for m in self.models)
-        if total_limit <= 0:
+        if self.session_budget_usd <= 0:
             return 0.0
-        return (total_used / total_limit) * 100.0
+        return (self.equivalent_api_cost / self.session_budget_usd) * 100.0
 
     @property
     def seconds_until_reset(self) -> int:

@@ -155,42 +155,48 @@ class TestModelUsageStatus:
     def test_from_values(self):
         status = ModelUsageStatus(
             model="claude-opus-4-6",
-            tokens_used=4_000_000,
-            tokens_limit=10_000_000,
+            cost_usd=4.0,
+            session_budget_usd=10.0,
         )
         assert status.percentage == 40.0
-        assert status.tokens_remaining == 6_000_000
 
-    def test_zero_limit(self):
+    def test_zero_budget(self):
         status = ModelUsageStatus(
             model="claude-opus-4-6",
-            tokens_used=100,
-            tokens_limit=0,
+            cost_usd=1.0,
+            session_budget_usd=0.0,
         )
         assert status.percentage == 0.0
-        assert status.tokens_remaining == 0
 
-    def test_over_limit(self):
+    def test_over_budget(self):
         status = ModelUsageStatus(
             model="claude-opus-4-6",
-            tokens_used=12_000_000,
-            tokens_limit=10_000_000,
+            cost_usd=12.0,
+            session_budget_usd=10.0,
         )
         assert status.percentage == 120.0
-        assert status.tokens_remaining == 0
+
+    def test_negative_budget(self):
+        status = ModelUsageStatus(
+            model="claude-opus-4-6",
+            cost_usd=5.0,
+            session_budget_usd=-1.0,
+        )
+        assert status.percentage == 0.0
 
 
 class TestPlanReport:
     def test_overall_percentage(self):
         models = [
-            ModelUsageStatus(model="a", tokens_used=5_000_000, tokens_limit=10_000_000),
-            ModelUsageStatus(model="b", tokens_used=3_000_000, tokens_limit=10_000_000),
+            ModelUsageStatus(model="a", cost_usd=3.0, session_budget_usd=10.0),
+            ModelUsageStatus(model="b", cost_usd=1.0, session_budget_usd=10.0),
         ]
         report = PlanReport(
             plan_name="max_5x",
             models=models,
             estimated_reset=None,
-            equivalent_api_cost=12.50,
+            equivalent_api_cost=4.0,
+            session_budget_usd=10.0,
         )
         assert report.overall_percentage == 40.0
 
@@ -200,6 +206,17 @@ class TestPlanReport:
             models=[],
             estimated_reset=None,
             equivalent_api_cost=0.0,
+            session_budget_usd=10.0,
+        )
+        assert report.overall_percentage == 0.0
+
+    def test_overall_percentage_zero_budget(self):
+        report = PlanReport(
+            plan_name="max_5x",
+            models=[],
+            estimated_reset=None,
+            equivalent_api_cost=5.0,
+            session_budget_usd=0.0,
         )
         assert report.overall_percentage == 0.0
 
@@ -210,6 +227,7 @@ class TestPlanReport:
             models=[],
             estimated_reset=future,
             equivalent_api_cost=0.0,
+            session_budget_usd=10.0,
         )
         secs = report.seconds_until_reset
         assert 7100 < secs <= 7200
@@ -220,5 +238,6 @@ class TestPlanReport:
             models=[],
             estimated_reset=None,
             equivalent_api_cost=0.0,
+            session_budget_usd=10.0,
         )
         assert report.seconds_until_reset == 0
