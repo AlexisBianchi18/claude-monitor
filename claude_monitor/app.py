@@ -249,6 +249,52 @@ class ClaudeMonitorApp(rumps.App):
             except ValueError:
                 pass
 
+    def _on_calibrate(self, _sender):
+        """Dialogo para calibrar session budget con % de claude.ai."""
+        response = rumps.Window(
+            title="Calibrate Session Budget",
+            message="Enter the session % shown on claude.ai/settings/usage:",
+            default_text="",
+            ok="Calibrate",
+            cancel="Cancel",
+            dimensions=(200, 24),
+        ).run()
+        if not response.clicked:
+            return
+        try:
+            pct = float(response.text.strip().replace("%", ""))
+        except (ValueError, AttributeError):
+            rumps.alert("Invalid input", "Please enter a number (e.g., 31)")
+            return
+        if not (1.0 <= pct <= 100.0):
+            rumps.alert("Invalid range", "Percentage must be between 1 and 100")
+            return
+
+        anchor = self.config.reset_anchor_utc
+        window_hours = self.config.reset_window_hours
+        if anchor is not None:
+            start, end = ClaudeLogParser._compute_window_boundaries(
+                anchor, window_hours
+            )
+            window_report = self.parser.get_window_report(start, end)
+            current_cost = window_report.total_cost
+        else:
+            daily = self.parser.get_daily_report(date.today())
+            current_cost = daily.total_cost
+
+        if current_cost <= 0:
+            rumps.alert("No usage", "No token usage in current window. Use some tokens first.")
+            return
+
+        new_budget = current_cost / (pct / 100.0)
+        self.config.set_session_budget(new_budget)
+        self._on_refresh(None)
+        rumps.notification(
+            title="Calibrated",
+            subtitle=f"Session budget: ${new_budget:.2f}",
+            message=f"Based on {pct:.0f}% and ${current_cost:.2f} current cost",
+        )
+
     @staticmethod
     def _mask_key(key: str) -> str:
         if not key or len(key) < 14:
@@ -583,6 +629,9 @@ class ClaudeMonitorApp(rumps.App):
                 label, callback=lambda sender, k=key: self._on_select_plan(k)
             )
         items.append(plan_menu)
+
+        calibrate_item = rumps.MenuItem("Calibrate...", callback=self._on_calibrate)
+        items.append(calibrate_item)
 
         style_label = "Bars \u2588\u2588\u2588" if style == "bar" else "Text 0/0"
         self._style_item.title = f"Style: {style_label}"
