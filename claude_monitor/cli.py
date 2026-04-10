@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from .config import ConfigManager
 from .log_parser import ClaudeLogParser
@@ -115,6 +115,18 @@ def main() -> None:
         action="store_true",
         help="Fetch latest pricing from Anthropic docs",
     )
+    ap.add_argument(
+        "--calibrate",
+        type=float,
+        metavar="PCT",
+        help="Calibrate session budget using the %% shown on claude.ai",
+    )
+    ap.add_argument(
+        "--reset-in",
+        type=int,
+        metavar="MIN",
+        help="Calibrate reset anchor using minutes until reset from claude.ai",
+    )
     args = ap.parse_args()
 
     if args.update_prices:
@@ -125,6 +137,48 @@ def main() -> None:
             print("Using fallback prices.")
         else:
             print(f"Prices updated: {len(pricing)} models")
+        return
+
+    if args.calibrate is not None:
+        config = ConfigManager()
+        pct = args.calibrate
+        if not (1.0 <= pct <= 100.0):
+            print("Error: percentage must be between 1 and 100.")
+            return
+
+        parser = ClaudeLogParser()
+        anchor = config.reset_anchor_utc
+        window_hours = config.reset_window_hours
+        if anchor is not None:
+            start, end = ClaudeLogParser._compute_window_boundaries(
+                anchor, window_hours
+            )
+            window_report = parser.get_window_report(start, end)
+            current_cost = window_report.total_cost
+        else:
+            daily = parser.get_daily_report(date.today())
+            current_cost = daily.total_cost
+
+        if current_cost <= 0:
+            print("Error: no usage in current window. Use some tokens first.")
+            return
+
+        old_budget = config.session_budget_usd
+        new_budget = current_cost / (pct / 100.0)
+        config.set_session_budget(new_budget)
+        print(f"Session budget calibrated: ${new_budget:.2f} (was ${old_budget:.2f})")
+
+        if args.reset_in is not None:
+            minutes = args.reset_in
+            if minutes <= 0:
+                print("Error: minutes must be positive.")
+                return
+            now = datetime.now(timezone.utc)
+            next_reset = now + timedelta(minutes=minutes)
+            new_anchor = next_reset - timedelta(hours=window_hours)
+            config.set_reset_anchor(new_anchor)
+            print(f"Reset anchor calibrated: {new_anchor.isoformat()}")
+
         return
 
     config = ConfigManager()
